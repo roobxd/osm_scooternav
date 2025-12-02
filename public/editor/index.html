@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>iD</title>
+    <link rel='stylesheet' href='iD.css'>
+    <link rel='icon' type='image/png' href='data:image/png;base64,iVBORw0KGgo='>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no'/>
+    <meta name='mobile-web-app-capable' content='yes'/>
+    <meta name='apple-mobile-web-app-status-bar-style' content='black-translucent'/>
+    <style type='text/css'>
+      /* apply document-level styling to standalone iD only */
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        /* disable elastic page bounce upon scroll */
+        overflow: hidden;
+      }
+    </style>
+  </head>
+
+  <body>
+    <style>
+      /* Hide iD’s built-in Save button to avoid OSM upload flow */
+      .top-toolbar button.save { display: none !important; }
+
+      .topbar { padding: 10px; background: linear-gradient(180deg,#f9fafb,#f1f5f9); border-bottom: 1px solid #e5e7eb; display:flex; gap:10px; align-items:center; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+      .btn { appearance:none; border:1px solid #d1d5db; background:#fff; color:#111827; padding:8px 12px; border-radius:8px; font-size:14px; line-height:1; cursor:pointer; transition: all .15s ease; }
+      .btn:hover { box-shadow:0 1px 2px rgba(0,0,0,.06); transform: translateY(-1px); }
+      .btn:disabled { opacity:.45; cursor:not-allowed; }
+      .btn-primary { background:#2563eb; border-color:#1d4ed8; color:#fff; }
+      .btn-primary:hover { background:#1d4ed8; }
+      .badge { display:inline-block; min-width:16px; padding:2px 6px; margin-left:8px; border-radius:999px; background:#0ea5e9; color:#fff; font-weight:600; font-size:12px; }
+      .status { margin-left:auto; color:#374151; font-size:13px; display:flex; align-items:center; gap:8px; }
+      .status-dot { width:8px; height:8px; border-radius:999px; background:#ef4444; }
+      .status-dot.online { background:#10b981; }
+    </style>
+    <div id='topbar' class='topbar'>
+      <button id='btn-login' class='btn btn-primary'>Login</button>
+      <button id='btn-logout' class='btn'>Logout</button>
+      <button id='btn-admin' class='btn' style='display:none;'>Admin</button>
+      <button id='btn-load-local' class='btn'>Load Local Streets</button>
+      <button id='btn-save' class='btn'>Save <span class='badge'>0</span></button>
+      <div id='status' class='status'><span id='status-dot' class='status-dot'></span><span id='status-text'>Not logged in</span></div>
+    </div>
+    <div id='id-container' style='position:absolute; top:40px; bottom:0; left:0; right:0; display:none;'></div>
+    <div id='map-overlay' style='position:absolute; top:40px; bottom:0; left:0; right:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#f8fafc,#f1f5f9); border-top:1px solid #e5e7eb;'>
+      <div style='text-align:center; max-width:360px; width:100%; padding:16px;'>
+        <div id='overlay-title' style='font-size:18px; font-weight:600; color:#111827; margin-bottom:8px;'>Login required to view the map</div>
+        <div id='overlay-desc' style='font-size:13px; color:#374151; margin-bottom:16px;'>Not logged in</div>
+        <div class='login-form' style='display:flex; flex-direction:column; gap:10px; text-align:left;'>
+          <label for='login-username' id='label-username' style='font-size:13px; color:#374151;'>Username</label>
+          <input id='login-username' type='text' class='login-input' style='padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;' autocomplete='username'>
+          <label for='login-password' id='label-password' style='font-size:13px; color:#374151;'>Password</label>
+          <input id='login-password' type='password' class='login-input' style='padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;' autocomplete='current-password'>
+          <button id='login-submit' class='btn btn-primary' style='margin-top:6px;'>Login</button>
+          <div id='login-error' style='font-size:12px; color:#ef4444; min-height:16px;'></div>
+        </div>
+      </div>
+    </div>
+
+    <div id='admin-overlay' style='position:absolute; top:40px; bottom:0; left:0; right:0; display:none; align-items:flex-start; justify-content:center; background:rgba(17,24,39,.75);'>
+      <div style='margin-top:24px; background:#fff; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,.15); max-width:720px; width:100%; padding:16px;'>
+        <div style='display:flex; align-items:center; justify-content:space-between;'>
+          <div id='admin-title' style='font-size:18px; font-weight:600; color:#111827;'>Admin</div>
+          <button id='admin-close' class='btn'>Close</button>
+        </div>
+        <div style='display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:12px;'>
+          <div style='border:1px solid #e5e7eb; border-radius:10px; padding:12px;'>
+            <div id='admin-create-title' style='font-weight:600; margin-bottom:8px;'>Create user</div>
+            <label id='admin-label-username' style='font-size:13px;'>Username</label>
+            <input id='admin-new-username' type='text' class='login-input' style='padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;'>
+            <label id='admin-label-password' style='font-size:13px; margin-top:8px;'>Password</label>
+            <input id='admin-new-password' type='password' class='login-input' style='padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;'>
+            <label style='display:flex; align-items:center; gap:6px; font-size:13px; margin-top:8px;'>
+              <input id='admin-new-isadmin' type='checkbox'> <span id='admin-label-admin'>Admin</span>
+            </label>
+            <button id='admin-create-btn' class='btn btn-primary' style='margin-top:10px;'>Create</button>
+            <div id='admin-create-status' style='font-size:12px; color:#374151; min-height:16px; margin-top:6px;'></div>
+          </div>
+          <div style='border:1px solid #e5e7eb; border-radius:10px; padding:12px;'>
+            <div id='admin-changes-title' style='font-weight:600; margin-bottom:8px;'>Recent changes</div>
+            <div id='admin-changes' style='max-height:320px; overflow:auto; border:1px solid #f1f5f9; border-radius:8px;'></div>
+          </div>
+        </div>
+        <div style='margin-top:16px; border:1px solid #e5e7eb; border-radius:10px; padding:12px;'>
+          <div id='admin-export-title' style='font-weight:600; margin-bottom:8px;'>Export dataset</div>
+          <div style='font-size:13px; color:#374151; margin-bottom:8px;'>Download the merged NL dataset without refetching OSM. For PBF, use the CLI below.</div>
+          <div style='display:flex; gap:8px; align-items:center; flex-wrap:wrap;'>
+            <button id='admin-export-geojson' class='btn btn-primary'>Download GeoJSON</button>
+            <button id='admin-export-copy-cli' class='btn'>Copy PBF export CLI</button>
+            <span id='admin-export-copy-status' style='font-size:12px; color:#374151;'></span>
+          </div>
+          <pre id='admin-export-cli' style='margin-top:8px; background:#f9fafb; color:#111827; padding:10px; border-radius:8px; border:1px solid #e5e7eb; font-size:12px; overflow:auto;'>wrangler r2 object get MAPDATA/nl.geojson --local --file nl.geojson
+osmium convert nl.geojson -o updated.osm
+osmium osm2pbf updated.osm -o updated.pbf
+# Result: updated.pbf</pre>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Normalize `?locale=xx` to hash `#locale=xx` which iD expects
+      (function normalizeLocaleParam() {
+        try {
+          const qs = new URLSearchParams(window.location.search);
+          const qLocale = qs.get('locale');
+          if (qLocale) {
+            const hash = new URLSearchParams(window.location.hash.slice(1));
+            if (!hash.get('locale')) {
+              hash.set('locale', qLocale);
+              window.location.hash = hash.toString();
+            }
+          } else {
+            // Default to Dutch when no locale provided
+            const hash = new URLSearchParams(window.location.hash.slice(1));
+            if (!hash.get('locale')) {
+              hash.set('locale', 'nl');
+              window.location.hash = hash.toString();
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+      })();
+    </script>
+
+    <script>
+      // Configure iD API base as requested
+      window.ID = { apiUrl: '/api' };
+
+      async function api(path, method = 'GET', body) {
+        const res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) return await res.json();
+        return await res.text();
+      }
+
+      // --- Custom GeoJSON import/export helpers for iD ---
+      // We persist a custom dataset in R2 and load it into iD’s base graph.
+      // Entities we import are tagged with `dataset=scooternav`.
+      const DATASET_TAG = 'scooternav';
+
+      function exportGeoJSONFromContext(context) {
+        const graph = context.graph();
+        const diff = context.history().difference();
+        const changed = diff.modified().concat(diff.created());
+        const features = [];
+        for (const entity of changed) {
+          if (!entity) continue;
+          // Only export changed ways to avoid persisting POIs/points
+          if (entity.type !== 'way') continue;
+          let geometry = null;
+          try {
+            if (entity.type === 'node') geometry = entity.asGeoJSON();
+            else geometry = entity.asGeoJSON(graph);
+          } catch (e) {
+            // skip if geometry fails
+            continue;
+          }
+          features.push({
+            type: 'Feature',
+            id: entity.id,
+            properties: Object.assign({}, entity.tags),
+            geometry
+          });
+        }
+        return { type: 'FeatureCollection', features };
+      }
+
+      function importGeoJSONToBase(context, geojson) {
+        if (!geojson || geojson.type !== 'FeatureCollection') return;
+        const entities = [];
+        const existingGraph = context && context.graph ? context.graph() : null;
+        // Helper to create a node entity from [lon,lat]
+        function createNode(coords, tags, id) {
+          const nodeInit = { loc: coords, tags };
+          if (id) nodeInit.id = id;
+          const node = iD.osmNode().initialize([nodeInit]);
+          return node;
+        }
+        // Helper to create a way from coordinates
+        function createWayFromLineString(coords, tags, wayId) {
+          const nodeIDs = [];
+          const localNodes = [];
+          for (let i = 0; i < coords.length; i++) {
+            const c = coords[i];
+            const n = createNode(c, {}, undefined);
+            localNodes.push(n);
+            nodeIDs.push(n.id);
+          }
+          // If a way with same id exists in the graph, preserve its tags (local edits win)
+          let mergedTags = tags || {};
+          try {
+            if (existingGraph && wayId) {
+              const existing = existingGraph.entity(wayId);
+              if (existing && existing.tags) {
+                mergedTags = Object.assign({}, tags || {}, existing.tags || {});
+              }
+            }
+          } catch (e) {}
+          // Ensure tag values are strings
+          try {
+            for (const k in mergedTags) {
+              if (Object.prototype.hasOwnProperty.call(mergedTags, k)) {
+                const v = mergedTags[k];
+                if (v === null || v === undefined) {
+                  delete mergedTags[k];
+                } else {
+                  mergedTags[k] = String(v);
+                }
+              }
+            }
+          } catch (e) {}
+          const wayInit = { nodes: nodeIDs, tags: mergedTags };
+          if (wayId) wayInit.id = wayId;
+          const way = iD.osmWay().initialize([wayInit]);
+          return { nodes: localNodes, way };
+        }
+        // Helper to create polygon way(s)
+        function createPolygonWaysFromCoords(rings, tags, wayId) {
+          // Use only the outer ring for simplicity; set area=yes
+          const outer = rings && rings[0] ? rings[0] : [];
+          const polygonTags = Object.assign({ area: 'yes' }, tags);
+          const { nodes, way } = createWayFromLineString(outer, polygonTags, wayId);
+          return { nodes, way };
+        }
+
+        for (const f of geojson.features || []) {
+          const props = Object.assign({}, f.properties || {}, { dataset: DATASET_TAG });
+          // Coerce all props to strings
+          try {
+            for (const k in props) {
+              if (Object.prototype.hasOwnProperty.call(props, k)) {
+                const v = props[k];
+                if (v === null || v === undefined) {
+                  delete props[k];
+                } else {
+                  props[k] = String(v);
+                }
+              }
+            }
+          } catch (e) {}
+          // Skip point-like features based on tags
+          try {
+            const objType = (props.objecttype || '').toLowerCase();
+            const highwayTag = (props.highway || '').toLowerCase();
+            const dropPointHighways = new Set(['street_lamp','street_light','traffic_signals']);
+            if (objType === 'point' || dropPointHighways.has(highwayTag)) {
+              continue;
+            }
+          } catch (e) {}
+          const g = f.geometry || {};
+          const fid = f.id; // preserve iD entity id when available
+          if (!g || !g.type) continue;
+          try {
+            if (g.type === 'Point' && Array.isArray(g.coordinates)) {
+              // Skip importing point features to reduce visual noise (e.g., streetlights)
+              continue;
+            } else if (g.type === 'MultiPoint' && Array.isArray(g.coordinates)) {
+              // Skip MultiPoint features entirely
+              continue;
+            } else if (g.type === 'LineString' && Array.isArray(g.coordinates)) {
+              const { nodes, way } = createWayFromLineString(g.coordinates, props, fid);
+              entities.push(...nodes);
+              entities.push(way);
+            } else if (g.type === 'Polygon' && Array.isArray(g.coordinates)) {
+              const { nodes, way } = createPolygonWaysFromCoords(g.coordinates, props, fid);
+              entities.push(...nodes);
+              entities.push(way);
+            } else if (g.type === 'MultiPolygon' && Array.isArray(g.coordinates)) {
+              // Create ways for each polygon; combine into a relation type=multipolygon
+              const memberWays = [];
+              const memberNodes = [];
+              for (const poly of g.coordinates) {
+                const { nodes, way } = createPolygonWaysFromCoords(poly, props, undefined);
+                memberNodes.push(...nodes);
+                memberWays.push(way);
+              }
+              entities.push(...memberNodes);
+              entities.push(...memberWays);
+              const members = memberWays.map(w => ({ id: w.id, type: 'way', role: 'outer' }));
+              const relInit = { tags: Object.assign({ type: 'multipolygon' }, props), members };
+              if (fid) relInit.id = fid;
+              const rel = iD.osmRelation().initialize([relInit]);
+              entities.push(rel);
+            }
+          } catch (e) {
+            console.warn('Import feature failed', e);
+          }
+        }
+
+        if (entities.length) {
+          try {
+            context.history().merge(entities);
+          } catch (e) {
+            console.error('Merge imported entities failed', e);
+          }
+        }
+      }
+
+      // Initial status will be updated after iD initializes
+
+      function setLoginError(msg) {
+        const el = document.getElementById('login-error');
+        if (el) el.textContent = msg || '';
+      }
+
+      async function performLogin(username, password) {
+        setLoginError('');
+        try {
+          const r = await api('/login', 'POST', { username, password });
+          if (r && r.ok) {
+            if (window._refreshMe) window._refreshMe();
+          } else {
+            setLoginError(S ? S('login_failed') : 'Login failed');
+          }
+        } catch (e) {
+          setLoginError('Login failed');
+        }
+      }
+
+      document.getElementById('btn-login').onclick = () => {
+        const overlay = document.getElementById('map-overlay');
+        if (overlay) overlay.style.display = 'flex';
+        const u = document.getElementById('login-username');
+        if (u) u.focus();
+      };
+      document.getElementById('btn-logout').onclick = async () => {
+        await api('/logout', 'POST');
+        if (window._refreshMe) window._refreshMe();
+      };
+
+      // Admin UI handlers
+      (function attachAdminHandlers() {
+        const openBtn = document.getElementById('btn-admin');
+        const overlay = document.getElementById('admin-overlay');
+        const closeBtn = document.getElementById('admin-close');
+        const createBtn = document.getElementById('admin-create-btn');
+        const inputUser = document.getElementById('admin-new-username');
+        const inputPass = document.getElementById('admin-new-password');
+        const inputIsAdmin = document.getElementById('admin-new-isadmin');
+        const statusEl = document.getElementById('admin-create-status');
+        const exportGeoJSONBtn = document.getElementById('admin-export-geojson');
+        const exportCopyCliBtn = document.getElementById('admin-export-copy-cli');
+        const exportCopyStatus = document.getElementById('admin-export-copy-status');
+        const exportCliEl = document.getElementById('admin-export-cli');
+
+        async function loadAdminChanges() {
+          const changesEl = document.getElementById('admin-changes');
+          if (!changesEl) return;
+          changesEl.innerHTML = '';
+          try {
+            const res = await fetch('/api/changes');
+            const json = await res.json();
+            const entries = (json && json.entries) || [];
+            if (entries.length === 0) {
+              changesEl.innerHTML = `<div style='padding:8px; color:#6b7280;'>${S('admin_no_changes')}</div>`;
+              return;
+            }
+            for (const e of entries) {
+              const row = document.createElement('div');
+              row.style.padding = '8px 10px';
+              row.style.borderBottom = '1px solid #f3f4f6';
+              row.innerHTML = `<div style='font-size:13px; color:#111827;'>${e.summary || 'Change'}</div>
+                <div style='font-size:12px; color:#6b7280;'>${e.user || ''} — ${e.timestamp || ''}</div>`;
+              changesEl.appendChild(row);
+            }
+          } catch (err) {
+            changesEl.innerHTML = `<div style='padding:8px; color:#ef4444;'>${S('admin_changes_failed')}</div>`;
+          }
+        }
+        window._loadAdminChanges = loadAdminChanges;
+
+        if (openBtn) openBtn.addEventListener('click', () => {
+          if (overlay) overlay.style.display = 'flex';
+          loadAdminChanges();
+        });
+        if (closeBtn) closeBtn.addEventListener('click', () => {
+          if (overlay) overlay.style.display = 'none';
+        });
+        if (createBtn) createBtn.addEventListener('click', async () => {
+          const username = (inputUser && inputUser.value) || '';
+          const password = (inputPass && inputPass.value) || '';
+          const isAdmin = !!(inputIsAdmin && inputIsAdmin.checked);
+          statusEl.textContent = '';
+          try {
+            const res = await fetch('/admin/create-user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username, password, isAdmin })
+            });
+            const j = await res.json();
+            if (res.ok && j && j.ok) {
+              statusEl.style.color = '#10b981';
+              statusEl.textContent = S('admin_create_success');
+              if (inputUser) inputUser.value = '';
+              if (inputPass) inputPass.value = '';
+              if (inputIsAdmin) inputIsAdmin.checked = false;
+              loadAdminChanges();
+            } else {
+              statusEl.style.color = '#ef4444';
+              statusEl.textContent = S('admin_create_error');
+            }
+          } catch (err) {
+            statusEl.style.color = '#ef4444';
+            statusEl.textContent = S('admin_create_error');
+          }
+        });
+
+        // Admin export handlers
+        if (exportGeoJSONBtn) exportGeoJSONBtn.addEventListener('click', async () => {
+          try {
+            // open in new tab to trigger attachment download
+            window.open('/admin/export', '_blank');
+          } catch (err) {
+            console.warn('Admin export failed', err);
+          }
+        });
+        if (exportCopyCliBtn) exportCopyCliBtn.addEventListener('click', async () => {
+          try {
+            const text = (exportCliEl && exportCliEl.textContent) || '';
+            await navigator.clipboard.writeText(text);
+            if (exportCopyStatus) {
+              exportCopyStatus.style.color = '#10b981';
+              exportCopyStatus.textContent = 'CLI copied';
+              setTimeout(() => { exportCopyStatus.textContent = ''; }, 2000);
+            }
+          } catch (err) {
+            if (exportCopyStatus) {
+              exportCopyStatus.style.color = '#ef4444';
+              exportCopyStatus.textContent = 'Copy failed';
+              setTimeout(() => { exportCopyStatus.textContent = ''; }, 2000);
+            }
+          }
+        });
+      })();
+
+      // Attach login form handlers
+      (function attachLoginHandlers() {
+        const btn = document.getElementById('login-submit');
+        const u = document.getElementById('login-username');
+        const p = document.getElementById('login-password');
+        if (btn) btn.addEventListener('click', () => {
+          const username = u && u.value || '';
+          const password = p && p.value || '';
+          performLogin(username, password);
+        });
+        function onKey(e) {
+          if (e.key === 'Enter') {
+            const username = u && u.value || '';
+            const password = p && p.value || '';
+            performLogin(username, password);
+          }
+        }
+        if (u) u.addEventListener('keydown', onKey);
+        if (p) p.addEventListener('keydown', onKey);
+      })();
+
+      var container = document.getElementById('id-container');
+      var newScript = document.createElement('script');
+      newScript.type = 'text/javascript';
+      newScript.onload = checkScript;
+      newScript.onerror = checkScript;
+      newScript.src = 'iD.min.js';
+
+      document.getElementsByTagName('head')[0].appendChild(newScript);
+
+
+      function checkScript() {
+        if (typeof iD === 'undefined' || !iD.utilDetect().support) {
+          container.innerHTML = 'Sorry, your browser is not currently supported. Please use another <a href="https://github.com/openstreetmap/iD#basics">browser</a> or <a href="https://wiki.openstreetmap.org/wiki/Editors">editor</a> to contribute to the map.';
+          container.style.padding = '20px';
+
+        } else {
+          // App-specific translations for header/UI (avoid missing-key warnings)
+          const appStrings = {
+            'en': {
+              login: 'Login',
+              logout: 'Logout',
+              save: 'Save',
+              load_local: 'Load Local Streets',
+              admin: 'Admin',
+              admin_close: 'Close',
+              admin_create_user: 'Create user',
+              admin_recent_changes: 'Recent changes',
+              admin_create: 'Create',
+              admin_create_success: 'User created',
+              admin_create_error: 'Create failed',
+              admin_no_changes: 'No recent changes',
+              admin_changes_failed: 'Failed to load changes',
+              admin_export: 'Export dataset',
+              admin_export_download: 'Download GeoJSON',
+              admin_export_copy_cli: 'Copy PBF export CLI',
+              not_logged_in: 'Not logged in',
+              logged_in_as: 'Logged in as {username}',
+              saved_changes: 'Saved {count} changes',
+              save_failed: 'Save failed',
+              login_required: 'Login required to view the map',
+              username_label: 'Username',
+              password_label: 'Password',
+              sign_in: 'Login',
+              login_failed: 'Login failed'
+            },
+            'nl': {
+              login: 'Inloggen',
+              logout: 'Uitloggen',
+              save: 'Opslaan',
+              load_local: 'Lokale straten laden',
+              admin: 'Beheer',
+              admin_close: 'Sluiten',
+              admin_create_user: 'Gebruiker aanmaken',
+              admin_recent_changes: 'Recente wijzigingen',
+              admin_create: 'Aanmaken',
+              admin_create_success: 'Gebruiker aangemaakt',
+              admin_create_error: 'Aanmaken mislukt',
+              admin_no_changes: 'Geen recente wijzigingen',
+              admin_changes_failed: 'Laden van wijzigingen mislukt',
+              admin_export: 'Dataset exporteren',
+              admin_export_download: 'Download GeoJSON',
+              admin_export_copy_cli: 'Kopieer PBF export CLI',
+              not_logged_in: 'Niet ingelogd',
+              logged_in_as: 'Ingelogd als {username}',
+              saved_changes: '{count} wijzigingen opgeslagen',
+              save_failed: 'Opslaan mislukt',
+              login_required: 'Inloggen vereist om de kaart te zien',
+              username_label: 'Gebruikersnaam',
+              password_label: 'Wachtwoord',
+              sign_in: 'Inloggen',
+              login_failed: 'Inloggen mislukt'
+            },
+            'nl-NL': {
+              login: 'Inloggen',
+              logout: 'Uitloggen',
+              save: 'Opslaan',
+              load_local: 'Lokale straten laden',
+              admin: 'Beheer',
+              admin_close: 'Sluiten',
+              admin_create_user: 'Gebruiker aanmaken',
+              admin_recent_changes: 'Recente wijzigingen',
+              admin_create: 'Aanmaken',
+              admin_create_success: 'Gebruiker aangemaakt',
+              admin_create_error: 'Aanmaken mislukt',
+              admin_no_changes: 'Geen recente wijzigingen',
+              admin_changes_failed: 'Laden van wijzigingen mislukt',
+              admin_export: 'Dataset exporteren',
+              admin_export_download: 'Download GeoJSON',
+              admin_export_copy_cli: 'Kopieer PBF export CLI',
+              not_logged_in: 'Niet ingelogd',
+              logged_in_as: 'Ingelogd als {username}',
+              saved_changes: '{count} wijzigingen opgeslagen',
+              save_failed: 'Opslaan mislukt',
+              login_required: 'Inloggen vereist om de kaart te zien',
+              username_label: 'Gebruikersnaam',
+              password_label: 'Wachtwoord',
+              sign_in: 'Inloggen',
+              login_failed: 'Inloggen mislukt'
+            },
+            'nl-BE': {
+              login: 'Aanmelden',
+              logout: 'Afmelden',
+              save: 'Opslaan',
+              load_local: 'Lokale straten laden',
+              admin: 'Beheer',
+              admin_close: 'Sluiten',
+              admin_create_user: 'Gebruiker aanmaken',
+              admin_recent_changes: 'Recente wijzigingen',
+              admin_create: 'Aanmaken',
+              admin_create_success: 'Gebruiker aangemaakt',
+              admin_create_error: 'Aanmaken mislukt',
+              admin_no_changes: 'Geen recente wijzigingen',
+              admin_changes_failed: 'Laden van wijzigingen mislukt',
+              admin_export: 'Dataset exporteren',
+              admin_export_download: 'Download GeoJSON',
+              admin_export_copy_cli: 'Kopieer PBF export CLI',
+              not_logged_in: 'Niet aangemeld',
+              logged_in_as: 'Aangemeld als {username}',
+              saved_changes: '{count} wijzigingen opgeslagen',
+              save_failed: 'Opslaan mislukt',
+              login_required: 'Aanmelden vereist om de kaart te zien',
+              username_label: 'Gebruikersnaam',
+              password_label: 'Wachtwoord',
+              sign_in: 'Aanmelden',
+              login_failed: 'Aanmelden mislukt'
+            }
+          };
+          function currentLocaleCode() {
+            const h = new URLSearchParams(window.location.hash.slice(1));
+            const code = h.get('locale') || (navigator.language || 'nl');
+            if (appStrings[code]) return code;
+            // normalize short code
+            if (String(code).toLowerCase().startsWith('nl')) return 'nl';
+            return 'nl';
+          }
+          function S(key, vars) {
+            const dict = appStrings[currentLocaleCode()] || appStrings['en'];
+            let str = (dict && dict[key]) || appStrings['en'][key] || key;
+            if (vars) for (const k of Object.keys(vars)) str = str.replace(`{${k}}`, vars[k]);
+            return str;
+          }
+          function applyTranslations() {
+            const $login = document.getElementById('btn-login');
+            const $logout = document.getElementById('btn-logout');
+            const $save = document.getElementById('btn-save');
+            const $loadLocal = document.getElementById('btn-load-local');
+            const $admin = document.getElementById('btn-admin');
+            if ($login) $login.textContent = S('login');
+            if ($logout) $logout.textContent = S('logout');
+            if ($admin) $admin.textContent = S('admin');
+            if ($save) {
+              const badge = $save.querySelector('.badge');
+              $save.innerHTML = S('save') + ' ' + (badge ? badge.outerHTML : "<span class='badge'>0</span>");
+            }
+            if ($loadLocal) $loadLocal.textContent = S('load_local');
+            // Also ensure status baseline text
+            const statusText = document.getElementById('status-text');
+            if (statusText) statusText.textContent = S('not_logged_in');
+            const overlayTitle = document.getElementById('overlay-title');
+            const overlayDesc = document.getElementById('overlay-desc');
+            if (overlayTitle) overlayTitle.textContent = S('login_required');
+            if (overlayDesc) overlayDesc.textContent = S('not_logged_in');
+            const labelUser = document.getElementById('label-username');
+            const labelPass = document.getElementById('label-password');
+            const loginBtn = document.getElementById('login-submit');
+            if (labelUser) labelUser.textContent = S('username_label');
+            if (labelPass) labelPass.textContent = S('password_label');
+            if (loginBtn) loginBtn.textContent = S('sign_in');
+
+            // Admin overlay strings
+            const adminTitle = document.getElementById('admin-title');
+            const adminClose = document.getElementById('admin-close');
+            const adminCreateTitle = document.getElementById('admin-create-title');
+            const adminChangesTitle = document.getElementById('admin-changes-title');
+            const adminCreateBtn = document.getElementById('admin-create-btn');
+            const adminLabelAdmin = document.getElementById('admin-label-admin');
+            const adminLabelUser = document.getElementById('admin-label-username');
+            const adminLabelPass = document.getElementById('admin-label-password');
+            const adminExportTitle = document.getElementById('admin-export-title');
+            const adminExportGeoJSON = document.getElementById('admin-export-geojson');
+            const adminExportCopyCli = document.getElementById('admin-export-copy-cli');
+            if (adminTitle) adminTitle.textContent = S('admin');
+            if (adminClose) adminClose.textContent = S('admin_close');
+            if (adminCreateTitle) adminCreateTitle.textContent = S('admin_create_user');
+            if (adminChangesTitle) adminChangesTitle.textContent = S('admin_recent_changes');
+            if (adminCreateBtn) adminCreateBtn.textContent = S('admin_create');
+            if (adminLabelAdmin) adminLabelAdmin.textContent = S('admin');
+            if (adminLabelUser) adminLabelUser.textContent = S('username_label');
+            if (adminLabelPass) adminLabelPass.textContent = S('password_label');
+            if (adminExportTitle) adminExportTitle.textContent = S('admin_export');
+            if (adminExportGeoJSON) adminExportGeoJSON.textContent = S('admin_export_download');
+            if (adminExportCopyCli) adminExportCopyCli.textContent = S('admin_export_copy_cli');
+          }
+          applyTranslations();
+
+          // Auto-load map data once after successful login
+          let _mapLoadedOnce = false;
+          async function autoLoadMap() {
+            if (_mapLoadedOnce || !window._idContext) return;
+            try {
+              const data = await fetch('/api/map').then(r => r.json());
+              const gj = data && data.type === 'FeatureCollection' ? data : { type: 'FeatureCollection', features: (data && data.features) || [] };
+              importGeoJSONToBase(window._idContext, gj);
+              // Avoid scanning the entire dataset for extent; default to NL view
+              try { zoomToNL(); } catch (e) {}
+              _mapLoadedOnce = true;
+            } catch (e) {
+              console.error('Auto-load map failed', e);
+            }
+          }
+
+          // Compute extent from GeoJSON and center/zoom map
+          function zoomToGeoJSON(geojson) {
+            if (!geojson || !Array.isArray(geojson.features) || geojson.features.length === 0) return;
+            let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+            for (const f of geojson.features) {
+              const g = f.geometry;
+              if (!g) continue;
+              const collect = (coord) => {
+                if (!Array.isArray(coord) || coord.length < 2) return;
+                const lon = +coord[0];
+                const lat = +coord[1];
+                if (isNaN(lon) || isNaN(lat)) return;
+                if (lon < minLon) minLon = lon;
+                if (lat < minLat) minLat = lat;
+                if (lon > maxLon) maxLon = lon;
+                if (lat > maxLat) maxLat = lat;
+              };
+              if (g.type === 'Point') {
+                collect(g.coordinates);
+              } else if (g.type === 'LineString') {
+                for (const c of g.coordinates) collect(c);
+              } else if (g.type === 'Polygon') {
+                for (const ring of g.coordinates) for (const c of ring) collect(c);
+              } else if (g.type === 'MultiPolygon') {
+                for (const poly of g.coordinates) for (const ring of poly) for (const c of ring) collect(c);
+              }
+            }
+            if (!isFinite(minLon) || !isFinite(minLat) || !isFinite(maxLon) || !isFinite(maxLat)) return;
+            const centerLon = (minLon + maxLon) / 2;
+            const centerLat = (minLat + maxLat) / 2;
+            const dx = Math.abs(maxLon - minLon);
+            const dy = Math.abs(maxLat - minLat);
+            let zoom = 17;
+            const span = Math.max(dx, dy);
+            if (span > 30) zoom = 2;
+            else if (span > 10) zoom = 5;
+            else if (span > 2) zoom = 10;
+            else if (span > 0.2) zoom = 13;
+            else if (span > 0.02) zoom = 16;
+            try { window._idContext.map().centerZoom([centerLon, centerLat], zoom); } catch (e) {}
+          }
+
+          // Quick default view over the Netherlands (avoids heavy extent computation)
+          function zoomToNL() {
+            try { window._idContext.map().centerZoom([5.3, 52.1], 7); } catch (e) {}
+          }
+
+          document.getElementById('btn-save').onclick = async function () {
+            // If not logged in or no context yet, do nothing
+            if (!window._idContext) {
+              alert(S('login_required'));
+              return;
+            }
+            // Require login for saving; prompt if not logged in
+            try {
+              const me = await api('/me');
+              if (!me || !me.username) {
+                const overlay = document.getElementById('map-overlay');
+                if (overlay) overlay.style.display = 'flex';
+                alert(S('login_required'));
+                return;
+              }
+            } catch (e) {
+              const overlay = document.getElementById('map-overlay');
+              if (overlay) overlay.style.display = 'flex';
+              alert(S('login_required'));
+              return;
+            }
+            try {
+              const gj = exportGeoJSONFromContext(window._idContext);
+              const diff = window._idContext.history().difference();
+              const changeCount = diff.length();
+              const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gj) });
+            if (res.ok) {
+              alert(S('saved_changes', { count: changeCount }));
+              // Reset iD’s change state so users can continue editing
+              try {
+                // Clear history stack and reload saved dataset into base graph
+                if (window._idContext && window._idContext.reset) {
+                  window._idContext.reset();
+                }
+                // Boot may have detached listeners; reattach
+                if (window._idContext && window._idContext.history) {
+                  window._idContext.history().on('change.topbar', updateSaveButton);
+                }
+                // Reload map data from server to reflect persisted changes into base
+                try {
+                  const data = await fetch('/api/map').then(r => r.json());
+                  const gjReload = data && data.type === 'FeatureCollection' ? data : { type: 'FeatureCollection', features: (data && data.features) || [] };
+                  importGeoJSONToBase(window._idContext, gjReload);
+                } catch (e) {
+                  console.warn('Reloading map after save failed', e);
+                }
+                // Also refresh visible local streets if zoomed in sufficiently
+                try {
+                  const z = window._idContext.map().zoom();
+                  if (z >= 14) {
+                    const bbox = computeViewportBBox();
+                    const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=residential,service,secondary,tertiary`;
+                    const res2 = await fetch(url);
+                    const json2 = await res2.json();
+                    if (res2.ok && json2 && json2.ok && json2.data) {
+                      importGeoJSONToBase(window._idContext, json2.data);
+                    }
+                  }
+                } catch (e) {
+                  console.warn('Viewport refresh after save failed', e);
+                }
+                updateSaveButton();
+              } catch (err) {
+                console.warn('Post-save reset failed', err);
+              }
+              refreshMe();
+              } else {
+                alert(S('save_failed'));
+              }
+            } catch (e) {
+              console.error(e);
+              alert('Failed to export GeoJSON');
+            }
+          };
+
+          // Update Save badge and enable state; guard for uninitialized context
+          function updateSaveButton() {
+            const $save = document.getElementById('btn-save');
+            const badge = $save && $save.querySelector('.badge');
+            if (!window._idContext) {
+              if (badge) badge.textContent = 0;
+              if ($save) $save.disabled = true;
+              return;
+            }
+            const diff = window._idContext.history().difference();
+            const count = diff.length();
+            if (badge) badge.textContent = count;
+            // Keep Save enabled so users can persist edits; badge reflects count
+            if ($save) $save.disabled = false;
+          }
+
+          // Determine current viewport bbox from iD map extent
+          function computeViewportBBox() {
+            try {
+              const ext = window._idContext.map().extent();
+              if (ext && typeof ext.polygon === 'function') {
+                const poly = ext.polygon(); // array of [lon, lat]
+                let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+                for (const pt of poly) {
+                  const lon = +pt[0];
+                  const lat = +pt[1];
+                  if (isNaN(lon) || isNaN(lat)) continue;
+                  if (lon < minLon) minLon = lon;
+                  if (lat < minLat) minLat = lat;
+                  if (lon > maxLon) maxLon = lon;
+                  if (lat > maxLat) maxLat = lat;
+                }
+                if (isFinite(minLat) && isFinite(minLon) && isFinite(maxLat) && isFinite(maxLon)) {
+                  return [minLat, minLon, maxLat, maxLon];
+                }
+              }
+            } catch (e) {}
+            // Fallback to NL bbox
+            return [50.7, 3.2, 53.7, 7.2];
+          }
+
+          // Load local streets (residential/service/secondary/tertiary) into the base graph
+          document.getElementById('btn-load-local').onclick = async function () {
+            if (!window._idContext) {
+              alert(S('login_required'));
+              return;
+            }
+            // Require sufficient zoom level for local street import
+            try {
+              const z = window._idContext.map().zoom();
+              if (z < 14) {
+                alert('Zoom verder in om lokale straten te laden (>=14).');
+                return;
+              }
+            } catch (e) {}
+            const bbox = computeViewportBBox();
+            try {
+              const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=residential,service,secondary,tertiary`;
+              const res = await fetch(url);
+              const json = await res.json();
+              if (res.ok && json && json.ok && json.data && json.data.type === 'FeatureCollection') {
+                importGeoJSONToBase(window._idContext, json.data);
+                try { zoomToGeoJSON(json.data); } catch (e) {}
+              } else {
+                alert('Failed to load local streets');
+              }
+            } catch (e) {
+              console.error('Load local streets failed', e);
+              alert('Failed to load local streets');
+            }
+          };
+
+          // Boot iD only after login
+          function bootID() {
+            var context = iD.coreContext()
+              .assetPath('')
+              .locale(currentLocaleCode())
+              .containerNode(container);
+            context.init();
+            // Ensure an immediate NL-centered view after init (helps Safari)
+            try { context.map().centerZoom([5.3, 52.1], 7); } catch (e) {}
+            window._idContext = context;
+            // Keep connection object but disable remote OSM fetching to avoid unintended loads
+            try {
+              const conn = context.connection();
+              if (conn && conn.toggle) {
+                conn.toggle(false);
+                if (conn.reset) conn.reset();
+              }
+            } catch (e) {
+              // ignore
+            }
+            // Set a safe background; prefer OSM tiles via Custom, else fall back to 'none'
+            try {
+              const custom = context.background().findSource('custom');
+              if (custom && custom.template) {
+                // Use OpenStreetMap standard tiles
+                custom.template('https://tile.openstreetmap.org/{zoom}/{x}/{y}.png');
+                context.background().baseLayerSource(custom);
+              } else {
+                const none = context.background().findSource('none');
+                if (none) context.background().baseLayerSource(none);
+              }
+            } catch (e) {
+              // ignore
+            }
+            // Block Cmd/Ctrl+S to prevent entering iD Save mode
+            window.addEventListener('keydown', function(e) {
+              const isSaveShortcut = (e.key && e.key.toLowerCase() === 's') && (e.metaKey || e.ctrlKey);
+              if (isSaveShortcut) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }, true);
+            // disable boundaries (unless we have an explicit disable_features list)
+            var q = iD.utilStringQs(window.location.hash);
+            // Default to showing only roads; hide points and non-road features.
+            // Even if a disable_features param exists, force-hide point layers.
+            var feat = context.features();
+            var toDisable = ['boundaries', 'address_points', 'points', 'buildings', 'building_parts', 'indoor', 'landuse', 'water', 'rail', 'pistes', 'aerialways', 'power', 'past_future', 'others', 'paths'];
+            toDisable.forEach(function(k){
+              try { feat.disable(k); } catch(e) { /* ignore unknown keys */ }
+            });
+            context.history().on('change.topbar', updateSaveButton);
+            updateSaveButton();
+
+            // Auto-load local streets when sufficiently zoomed in (throttled during move)
+            let _autoLocalFetching = false;
+            let _autoLastLoadTime = 0;
+            try {
+              context.map().on('move.autoLocal', async function () {
+                if (!window._idContext) return;
+                const z = window._idContext.map().zoom();
+                const now = Date.now();
+                if (z >= 14 && !_autoLocalFetching && (now - _autoLastLoadTime > 2000)) {
+                  _autoLocalFetching = true;
+                  const bbox = computeViewportBBox();
+                  try {
+                    const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=residential,service,secondary,tertiary`;
+                    const res = await fetch(url);
+                    const json = await res.json();
+                    if (res.ok && json && json.ok && json.data && json.data.type === 'FeatureCollection') {
+                      importGeoJSONToBase(window._idContext, json.data);
+                    }
+                  } catch (e) {
+                    console.warn('Auto local streets load failed', e);
+                  } finally {
+                    _autoLocalFetching = false;
+                    _autoLastLoadTime = Date.now();
+                  }
+                }
+              });
+            } catch (e) {}
+          }
+
+          // Refresh status, toggle map visibility, and boot on login
+          async function refreshMe() {
+            try {
+              const me = await api('/me');
+              const statusText = document.getElementById('status-text');
+              const dot = document.getElementById('status-dot');
+              const overlay = document.getElementById('map-overlay');
+              const adminBtn = document.getElementById('btn-admin');
+              const adminOverlay = document.getElementById('admin-overlay');
+              if (me && me.username) {
+                statusText.textContent = `${S('logged_in_as', { username: me.username })} (changes: ${me.changeCount || 0})`;
+                dot.classList.add('online');
+                // Show map, hide overlay
+                container.style.display = 'block';
+                if (overlay) overlay.style.display = 'none';
+                if (adminBtn) adminBtn.style.display = me.isAdmin ? 'inline-block' : 'none';
+                if (adminOverlay && !me.isAdmin) adminOverlay.style.display = 'none';
+                if (!window._idContext) bootID();
+                await autoLoadMap();
+              } else {
+                statusText.textContent = S('not_logged_in');
+                dot.classList.remove('online');
+                // Show map even when not logged in; hide admin UI
+                container.style.display = 'block';
+                if (overlay) overlay.style.display = 'none';
+                if (adminBtn) adminBtn.style.display = 'none';
+                if (adminOverlay) adminOverlay.style.display = 'none';
+                if (!window._idContext) bootID();
+                await autoLoadMap();
+                updateSaveButton();
+              }
+            } catch {
+              const statusText = document.getElementById('status-text');
+              const dot = document.getElementById('status-dot');
+              const overlay = document.getElementById('map-overlay');
+              const adminBtn = document.getElementById('btn-admin');
+              const adminOverlay = document.getElementById('admin-overlay');
+              statusText.textContent = S('not_logged_in');
+              dot.classList.remove('online');
+              // On error, still boot and show map to avoid indefinite loading
+              container.style.display = 'block';
+              if (overlay) overlay.style.display = 'none';
+              if (adminBtn) adminBtn.style.display = 'none';
+              if (adminOverlay) adminOverlay.style.display = 'none';
+              if (!window._idContext) bootID();
+              await autoLoadMap();
+              updateSaveButton();
+            }
+          }
+          window._refreshMe = refreshMe;
+
+          refreshMe();
+        }
+      }
+    </script>
+  </body>
+</html>

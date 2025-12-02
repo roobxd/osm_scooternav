@@ -1,0 +1,19 @@
+# Cloudflare/Local dev
+.wrangler/
+.dev.vars
+cookie.txt
+tmp/
+
+# Node
+node_modules/
+id-src/node_modules/
+
+# Build/output caches
+id-src/dist/
+
+# Data (keep out of git; upload to R2)
+nl.geojson
+
+# OS/editor
+.DS_Store
+.vscode/
