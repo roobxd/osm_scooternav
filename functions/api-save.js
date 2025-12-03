@@ -7,34 +7,45 @@ export async function handle(request, env) {
   const body = await json(request);
   if (!body) return respondJSON({ error: 'Invalid JSON' }, 400);
 
-  // Merge incoming changes into the existing baseline stored in R2
-  // Expect body to be FeatureCollection of changed features
-  let baseline = { type: 'FeatureCollection', features: [] };
+  // Delta-only save: record changes in KV and skip baseline rewrite.
+  const changes = Array.isArray(body.features) ? body.features : [];
+  const featureCount = changes.length;
+  // Compute a simple bbox summary for the change set
+  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
   try {
-    const obj = await env.MAPDATA.get('nl.geojson');
-    if (obj) {
-      const text = await new Response(obj.body).text();
-      baseline = JSON.parse(text);
+    for (const f of changes) {
+      const g = f && f.geometry;
+      const collect = (coord) => {
+        if (!Array.isArray(coord) || coord.length < 2) return;
+        const lon = +coord[0];
+        const lat = +coord[1];
+        if (isNaN(lon) || isNaN(lat)) return;
+        if (lon < minLon) minLon = lon;
+        if (lat < minLat) minLat = lat;
+        if (lon > maxLon) maxLon = lon;
+        if (lat > maxLat) maxLat = lat;
+      };
+      if (!g) continue;
+      if (g.type === 'Point') collect(g.coordinates);
+      else if (g.type === 'LineString') for (const c of g.coordinates || []) collect(c);
+      else if (g.type === 'Polygon') for (const ring of g.coordinates || []) for (const c of ring) collect(c);
+      else if (g.type === 'MultiPolygon') for (const poly of g.coordinates || []) for (const ring of poly) for (const c of ring) collect(c);
     }
   } catch {}
-
-  const byId = new Map();
-  for (const f of (baseline.features || [])) {
-    byId.set(f.id || `${f.properties?._osm_type || ''}:${f.properties?._osm_id || ''}`, f);
-  }
-  const changes = Array.isArray(body.features) ? body.features : [];
-  for (const cf of changes) {
-    const cid = cf.id || `${cf.properties?._osm_type || ''}:${cf.properties?._osm_id || ''}`;
-    // Replace or insert
-    byId.set(cid, cf);
-  }
-  const merged = { type: 'FeatureCollection', features: Array.from(byId.values()) };
-  await env.MAPDATA.put('nl.geojson', JSON.stringify(merged), { httpMetadata: { contentType: 'application/json' } });
+  const bbox = (isFinite(minLon) && isFinite(minLat) && isFinite(maxLon) && isFinite(maxLat))
+    ? [minLat, minLon, maxLat, maxLon]
+    : null;
 
   // Log change
   const ts = new Date().toISOString();
   const key = `changes:${ts}:${randomId()}`;
-  const log = { user: auth.user.username, timestamp: ts, summary: 'Map updated' };
+  const log = {
+    user: auth.user.username,
+    timestamp: ts,
+    summary: `Saved ${featureCount} feature${featureCount === 1 ? '' : 's'}`,
+    bbox,
+    data: { type: 'FeatureCollection', features: changes }
+  };
   await env.CHANGES.put(key, JSON.stringify(log));
 
   // Increment user change count

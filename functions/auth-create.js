@@ -5,14 +5,23 @@ import { respondJSON, json, hashPassword, requireAuth } from './_utils.js';
 // POST /admin/create-user { username, password }
 export async function handle(request, env) {
   if (request.method !== 'POST') return respondJSON({ error: 'Method Not Allowed' }, 405);
-  // Allow either admin token or a logged-in admin user
+  // Allow either admin token, a logged-in admin user, or bootstrap if no users exist
+  let allowed = false;
   const token = request.headers.get('X-Admin-Token');
-  if (!(env.ADMIN_TOKEN && token === env.ADMIN_TOKEN)) {
-    const auth = await requireAuth(request, env);
-    if (!auth || !auth.user?.isAdmin) {
-      return respondJSON({ error: 'Forbidden' }, 403);
+  if (env.ADMIN_TOKEN && token === env.ADMIN_TOKEN) {
+    allowed = true;
+  } else {
+    const list = await env.USERS.list({ prefix: 'users:', limit: 1 });
+    const noUsers = !list || !Array.isArray(list.keys) || list.keys.length === 0;
+    if (noUsers) {
+      // Bootstrap: allow creating the first user when no accounts exist
+      allowed = true;
+    } else {
+      const auth = await requireAuth(request, env);
+      if (auth && auth.user?.isAdmin) allowed = true;
     }
   }
+  if (!allowed) return respondJSON({ error: 'Forbidden' }, 403);
   const body = await json(request);
   if (!body || !body.username || !body.password) return respondJSON({ error: 'Invalid payload' }, 400);
 

@@ -838,6 +838,12 @@ osmium osm2pbf updated.osm -o updated.pbf
               alert(S('login_required'));
               return;
             }
+            if (!window._isLoggedIn) {
+              const overlay = document.getElementById('map-overlay');
+              if (overlay) overlay.style.display = 'flex';
+              alert(S('login_required'));
+              return;
+            }
             // Require sufficient zoom level for local street import
             try {
               const z = window._idContext.map().zoom();
@@ -923,6 +929,7 @@ osmium osm2pbf updated.osm -o updated.pbf
             try {
               context.map().on('move.autoLocal', async function () {
                 if (!window._idContext) return;
+                if (!window._isLoggedIn) return;
                 const z = window._idContext.map().zoom();
                 const now = Date.now();
                 if (z >= 14 && !_autoLocalFetching && (now - _autoLastLoadTime > 2000)) {
@@ -955,7 +962,10 @@ osmium osm2pbf updated.osm -o updated.pbf
               const overlay = document.getElementById('map-overlay');
               const adminBtn = document.getElementById('btn-admin');
               const adminOverlay = document.getElementById('admin-overlay');
+              const logoutBtn = document.getElementById('btn-logout');
+              const loadLocalBtn = document.getElementById('btn-load-local');
               if (me && me.username) {
+                window._isLoggedIn = true;
                 statusText.textContent = `${S('logged_in_as', { username: me.username })} (changes: ${me.changeCount || 0})`;
                 dot.classList.add('online');
                 // Show map, hide overlay
@@ -963,9 +973,12 @@ osmium osm2pbf updated.osm -o updated.pbf
                 if (overlay) overlay.style.display = 'none';
                 if (adminBtn) adminBtn.style.display = me.isAdmin ? 'inline-block' : 'none';
                 if (adminOverlay && !me.isAdmin) adminOverlay.style.display = 'none';
+                if (logoutBtn) logoutBtn.disabled = false;
+                if (loadLocalBtn) loadLocalBtn.disabled = false;
                 if (!window._idContext) bootID();
                 await autoLoadMap();
               } else {
+                window._isLoggedIn = false;
                 statusText.textContent = S('not_logged_in');
                 dot.classList.remove('online');
                 // Show map even when not logged in; hide admin UI
@@ -973,16 +986,20 @@ osmium osm2pbf updated.osm -o updated.pbf
                 if (overlay) overlay.style.display = 'none';
                 if (adminBtn) adminBtn.style.display = 'none';
                 if (adminOverlay) adminOverlay.style.display = 'none';
+                if (logoutBtn) logoutBtn.disabled = true;
+                if (loadLocalBtn) loadLocalBtn.disabled = true;
                 if (!window._idContext) bootID();
-                await autoLoadMap();
                 updateSaveButton();
               }
             } catch {
+              window._isLoggedIn = false;
               const statusText = document.getElementById('status-text');
               const dot = document.getElementById('status-dot');
               const overlay = document.getElementById('map-overlay');
               const adminBtn = document.getElementById('btn-admin');
               const adminOverlay = document.getElementById('admin-overlay');
+              const logoutBtn = document.getElementById('btn-logout');
+              const loadLocalBtn = document.getElementById('btn-load-local');
               statusText.textContent = S('not_logged_in');
               dot.classList.remove('online');
               // On error, still boot and show map to avoid indefinite loading
@@ -990,8 +1007,9 @@ osmium osm2pbf updated.osm -o updated.pbf
               if (overlay) overlay.style.display = 'none';
               if (adminBtn) adminBtn.style.display = 'none';
               if (adminOverlay) adminOverlay.style.display = 'none';
+              if (logoutBtn) logoutBtn.disabled = true;
+              if (loadLocalBtn) loadLocalBtn.disabled = true;
               if (!window._idContext) bootID();
-              await autoLoadMap();
               updateSaveButton();
             }
           }
