@@ -12,6 +12,7 @@ import * as createUser from './auth-create.js';
 import * as updateUser from './auth-update.js';
 import * as resetBaseline from './admin-reset-baseline.js';
 import * as uploadBaseline from './admin-upload.js';
+import * as adminExport from './admin-export.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -30,6 +31,9 @@ export async function onRequest(context) {
     { path: '/admin/update-user', mod: updateUser },
     { path: '/admin/reset-baseline', mod: resetBaseline },
     { path: '/admin/upload', mod: uploadBaseline },
+    // Admin export (merged baseline + KV deltas)
+    { path: '/admin/export', mod: adminExport },
+    { path: '/admin-export', mod: adminExport },
   ];
 
   for (const r of routes) {
