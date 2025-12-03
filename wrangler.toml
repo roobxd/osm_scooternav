@@ -1,0 +1,24 @@
+name = "osm-scooternav"
+compatibility_date = "2025-12-02"
+
+# Bind the R2 bucket used by functions to the lowercase bucket name
+r2_buckets = [
+  { binding = "MAPDATA", bucket_name = "mapdata" }
+]
+
+# Bind KV namespaces used by auth and change logs
+kv_namespaces = [
+  { binding = "USERS", id = "USERS_DEV" },
+  { binding = "CHANGES", id = "CHANGES_DEV" }
+]
+
+# Development environment variables for auth/session
+[vars]
+ADMIN_TOKEN = "dev-admin-token"
+PASSWORD_SALT = "dev-salt"
+SESSION_SECRET = "dev-session-secret"
+# Empty string keeps cookies non-Secure for local HTTP
+SECURE_COOKIES = ""
+
+# For Pages, serve static assets from the public directory
+pages_build_output_dir = "./public"

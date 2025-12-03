@@ -11,6 +11,7 @@ import * as importBBox from './api-import-bbox.js';
 import * as createUser from './auth-create.js';
 import * as updateUser from './auth-update.js';
 import * as resetBaseline from './admin-reset-baseline.js';
+import * as uploadBaseline from './admin-upload.js';
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -28,6 +29,7 @@ export async function onRequest(context) {
     { path: '/admin/create-user', mod: createUser },
     { path: '/admin/update-user', mod: updateUser },
     { path: '/admin/reset-baseline', mod: resetBaseline },
+    { path: '/admin/upload', mod: uploadBaseline },
   ];
 
   for (const r of routes) {

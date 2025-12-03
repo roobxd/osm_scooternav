@@ -27,24 +27,33 @@ export async function handle(request, env) {
   const endpoints = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
-    'https://overpass.openstreetmap.ru/api/interpreter'
+    'https://overpass.openstreetmap.ru/api/interpreter',
+    'https://overpass.openstreetmap.fr/api/interpreter'
   ];
-  let lastErr = null;
-  for (const url of endpoints) {
+
+  async function queryOverpass(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45000);
     try {
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-        body: new URLSearchParams({ data: overpassQuery }).toString()
+        body: new URLSearchParams({ data: overpassQuery }).toString(),
+        signal: controller.signal
       });
-      if (!resp.ok) { lastErr = `Overpass error ${resp.status} at ${url}`; continue; }
-      overpassJSON = await resp.json();
-      break;
-    } catch (e) {
-      lastErr = `Failed to fetch Overpass at ${url}: ${e.message || e}`;
+      if (!resp.ok) throw new Error(`Overpass error ${resp.status} at ${url}`);
+      return await resp.json();
+    } finally {
+      clearTimeout(timer);
     }
   }
-  if (!overpassJSON) return respondJSON({ error: lastErr || 'Overpass failed' }, 502);
+
+  try {
+    overpassJSON = await Promise.any(endpoints.map((u) => queryOverpass(u)));
+  } catch (aggregateErr) {
+    const details = (aggregateErr && aggregateErr.errors) ? aggregateErr.errors.map(e => String(e.message || e)) : ['All Overpass mirrors failed'];
+    return respondJSON({ error: 'Overpass failed across mirrors', details }, 502);
+  }
 
   // Convert Overpass JSON to GeoJSON FeatureCollection (LineString for ways)
   // Preserve OSM IDs as Feature.id = 'w' + way.id
