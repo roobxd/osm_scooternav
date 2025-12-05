@@ -1,4 +1,4 @@
-// Pages Functions middleware to route explicit paths to our handlers.
+// Pages Functions middleware to route explicit paths to handlers.
 // This allows us to keep the filenames requested while serving specific endpoints.
 
 import * as login from './auth-login.js';

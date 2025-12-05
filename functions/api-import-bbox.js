@@ -17,9 +17,23 @@ export async function handle(request, env) {
     return respondJSON({ error: 'Invalid bbox' }, 400);
   }
   const [south, west, north, east] = parts;
-  const allowed = new Set(['motorway','trunk','primary','secondary','tertiary','residential','service','unclassified']);
-  const requested = classesStr.split(',').map(s => s.trim()).filter(Boolean).filter(c => allowed.has(c));
-  const classRegex = requested.length ? `^(${requested.join('|')})$` : '^(residential|service|secondary|tertiary)$';
+  // Support full set of common highway values, including *_link variants
+  const allowed = new Set([
+    'motorway','motorway_link',
+    'trunk','trunk_link',
+    'primary','primary_link',
+    'secondary','secondary_link',
+    'tertiary','tertiary_link',
+    'residential','service','unclassified','road'
+  ]);
+  const requested = classesStr
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .filter(c => allowed.has(c));
+  const classRegex = requested.length
+    ? `^(${requested.join('|')})$`
+    : '^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|residential|service|unclassified|road)$';
 
   // Build Overpass query for bbox and requested classes
   const overpassQuery = `\n[out:json][timeout:120][bbox:${south},${west},${north},${east}];\n(\n  way["highway"~"${classRegex}"];\n);\n(._;>;);\nout body;\n`;

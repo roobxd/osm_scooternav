@@ -19,6 +19,25 @@
         overflow: hidden;
       }
     </style>
+    <!-- ScooterNav theme overrides -->
+    <style>
+      .badge { background:#E63A46 !important; color:#fff; }
+      .btn:focus { outline: 2px solid #E63A46; outline-offset: 2px; box-shadow: 0 0 0 3px rgba(230,58,70,.25); }
+      /* Map line color overrides: alleen onze dataset (.layer-mapdata) rood per wegtype */
+      .layer-mapdata path.line.casing.tag-highway { stroke: #8B1E26 !important; }
+      .layer-mapdata path.line.stroke.tag-highway { stroke: #E63A46 !important; }
+      /* Per wegtype variaties (roodtinten) */
+      .layer-mapdata path.line.stroke.tag-highway-motorway { stroke: #E63A46 !important; }
+      .layer-mapdata path.line.stroke.tag-highway-trunk { stroke: #E25760 !important; }
+      .layer-mapdata path.line.stroke.tag-highway-primary { stroke: #E86A74 !important; }
+      .layer-mapdata path.line.stroke.tag-highway-secondary { stroke: #ED7D88 !important; }
+      .layer-mapdata path.line.stroke.tag-highway-tertiary { stroke: #F2909C !important; }
+      .layer-mapdata path.line.stroke.tag-highway-residential,
+      .layer-mapdata path.line.stroke.tag-highway-service,
+      .layer-mapdata path.line.stroke.tag-highway-unclassified,
+      .layer-mapdata path.line.stroke.tag-highway-road { stroke: #F59BA6 !important; }
+    </style>
+    </style>
   </head>
 
   <body>
@@ -30,16 +49,27 @@
       .btn { appearance:none; border:1px solid #d1d5db; background:#fff; color:#111827; padding:8px 12px; border-radius:8px; font-size:14px; line-height:1; cursor:pointer; transition: all .15s ease; }
       .btn:hover { box-shadow:0 1px 2px rgba(0,0,0,.06); transform: translateY(-1px); }
       .btn:disabled { opacity:.45; cursor:not-allowed; }
-      .btn-primary { background:#2563eb; border-color:#1d4ed8; color:#fff; }
-      .btn-primary:hover { background:#1d4ed8; }
-      .badge { display:inline-block; min-width:16px; padding:2px 6px; margin-left:8px; border-radius:999px; background:#0ea5e9; color:#fff; font-weight:600; font-size:12px; }
+      /* ScooterNav red accents */
+      .btn-primary { background:#E63A46; border-color:#E63A46; color:#fff; }
+      .btn-primary:hover { background:#C5303B; }
+      .badge { display:inline-block; min-width:16px; padding:2px 6px; margin-left:8px; border-radius:999px; background:#E63A46; color:#fff; font-weight:600; font-size:12px; }
       .status { margin-left:auto; color:#374151; font-size:13px; display:flex; align-items:center; gap:8px; }
       .status-dot { width:8px; height:8px; border-radius:999px; background:#ef4444; }
       .status-dot.online { background:#10b981; }
+      /* Maxspeed visualization: color-code roads by speed so changes are visible */
+      path.line.stroke.tag-maxspeed-30 { stroke: #4f46e5 !important; }
+      path.line.stroke.tag-maxspeed-50 { stroke: #10b981 !important; }
+      path.line.stroke.tag-maxspeed-60 { stroke: #22c55e !important; }
+      path.line.stroke.tag-maxspeed-80 { stroke: #f59e0b !important; }
+      path.line.stroke.tag-maxspeed-100 { stroke: #ef4444 !important; }
+      path.line.stroke.tag-maxspeed-120 { stroke: #dc2626 !important; }
+      /* Emphasize roads with a maxspeed tag */
+      path.line.stroke[class*='tag-maxspeed-'] { stroke-width: 2.5px; }
+      path.line.casing[class*='tag-maxspeed-'] { stroke-width: 4px; }
     </style>
     <div id='topbar' class='topbar'>
       <button id='btn-login' class='btn btn-primary'>Login</button>
-      <button id='btn-logout' class='btn'>Logout</button>
+      <button id='btn-logout' class='btn btn-primary'>Logout</button>
       <button id='btn-admin' class='btn' style='display:none;'>Admin</button>
       <button id='btn-load-local' class='btn'>Load Local Streets</button>
       <button id='btn-save' class='btn'>Save <span class='badge'>0</span></button>
@@ -131,7 +161,7 @@ osmium osm2pbf updated.osm -o updated.pbf
       window.ID = { apiUrl: '/api' };
 
       async function api(path, method = 'GET', body) {
-        const res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+        const res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined, credentials: 'include' });
         const ct = res.headers.get('content-type') || '';
         if (ct.includes('application/json')) return await res.json();
         return await res.text();
@@ -173,11 +203,27 @@ osmium osm2pbf updated.osm -o updated.pbf
         if (!geojson || geojson.type !== 'FeatureCollection') return;
         const entities = [];
         const existingGraph = context && context.graph ? context.graph() : null;
+        // Deduplicate nodes across imported features using a spatial hash
+        const nodeCache = new Map(); // key: "lon,lat" rounded; value: iD.osmNode
+        function coordKey(c) {
+          try {
+            const lon = +c[0];
+            const lat = +c[1];
+            // round to ~1cm precision to snap tiny offsets
+            return `${lon.toFixed(7)},${lat.toFixed(7)}`;
+          } catch (e) {
+            return `${c}`;
+          }
+        }
         // Helper to create a node entity from [lon,lat]
         function createNode(coords, tags, id) {
+          const key = coordKey(coords);
+          const cached = nodeCache.get(key);
+          if (cached) return cached;
           const nodeInit = { loc: coords, tags };
           if (id) nodeInit.id = id;
           const node = iD.osmNode().initialize([nodeInit]);
+          nodeCache.set(key, node);
           return node;
         }
         // Helper to create a way from coordinates
@@ -265,6 +311,14 @@ osmium osm2pbf updated.osm -o updated.pbf
               const { nodes, way } = createWayFromLineString(g.coordinates, props, fid);
               entities.push(...nodes);
               entities.push(way);
+            } else if (g.type === 'MultiLineString' && Array.isArray(g.coordinates)) {
+              // Create a separate way for each LineString
+              for (const line of g.coordinates) {
+                if (!Array.isArray(line)) continue;
+                const { nodes, way } = createWayFromLineString(line, props, undefined);
+                entities.push(...nodes);
+                entities.push(way);
+              }
             } else if (g.type === 'Polygon' && Array.isArray(g.coordinates)) {
               const { nodes, way } = createPolygonWaysFromCoords(g.coordinates, props, fid);
               entities.push(...nodes);
@@ -653,20 +707,32 @@ osmium osm2pbf updated.osm -o updated.pbf
           }
           applyTranslations();
 
-          // Auto-load map data once after successful login
+          // Load merged baseline + saved changes from the server
           let _mapLoadedOnce = false;
-          async function autoLoadMap() {
-            if (_mapLoadedOnce || !window._idContext) return;
+          async function loadMergedMapData() {
+            if (!window._idContext) return;
             try {
-              const data = await fetch('/api/map').then(r => r.json());
-              const gj = data && data.type === 'FeatureCollection' ? data : { type: 'FeatureCollection', features: (data && data.features) || [] };
-              importGeoJSONToBase(window._idContext, gj);
-              // Avoid scanning the entire dataset for extent; default to NL view
-              try { zoomToNL(); } catch (e) {}
-              _mapLoadedOnce = true;
+              const res = await fetch('/api/map', { credentials: 'include' });
+              const json = await res.json();
+              if (res.ok && json && json.type === 'FeatureCollection') {
+                try { window._idContext.history().reset(); } catch (e) {}
+                importGeoJSONToBase(window._idContext, json);
+                try { zoomToGeoJSON(json); } catch (e) {}
+                updateSaveButton();
+                _mapLoadedOnce = true;
+              } else {
+                console.warn('Load merged map failed', json);
+              }
             } catch (e) {
-              console.error('Auto-load map failed', e);
+              console.warn('Load merged map error', e);
             }
+          }
+
+          // Auto-load merged map data after login
+          async function autoLoadMap() {
+            if (_mapLoadedOnce) return;
+            await loadMergedMapData();
+            try { zoomToNL(); } catch (e) {}
           }
 
           // Compute extent from GeoJSON and center/zoom map
@@ -744,42 +810,12 @@ osmium osm2pbf updated.osm -o updated.pbf
               const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gj) });
             if (res.ok) {
               alert(S('saved_changes', { count: changeCount }));
-              // Reset iD’s change state so users can continue editing
+              // Na opslaan: herlaad de samengevoegde dataset zodat wijzigingen zichtbaar blijven
               try {
-                // Clear history stack and reload saved dataset into base graph
-                if (window._idContext && window._idContext.reset) {
-                  window._idContext.reset();
-                }
-                // Boot may have detached listeners; reattach
-                if (window._idContext && window._idContext.history) {
-                  window._idContext.history().on('change.topbar', updateSaveButton);
-                }
-                // Reload map data from server to reflect persisted changes into base
-                try {
-                  const data = await fetch('/api/map').then(r => r.json());
-                  const gjReload = data && data.type === 'FeatureCollection' ? data : { type: 'FeatureCollection', features: (data && data.features) || [] };
-                  importGeoJSONToBase(window._idContext, gjReload);
-                } catch (e) {
-                  console.warn('Reloading map after save failed', e);
-                }
-                // Also refresh visible local streets if zoomed in sufficiently
-                try {
-                  const z = window._idContext.map().zoom();
-                  if (z >= 14) {
-                    const bbox = computeViewportBBox();
-                    const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=residential,service,secondary,tertiary`;
-                    const res2 = await fetch(url);
-                    const json2 = await res2.json();
-                    if (res2.ok && json2 && json2.ok && json2.data) {
-                      importGeoJSONToBase(window._idContext, json2.data);
-                    }
-                  }
-                } catch (e) {
-                  console.warn('Viewport refresh after save failed', e);
-                }
-                updateSaveButton();
+                await loadMergedMapData();
               } catch (err) {
-                console.warn('Post-save reset failed', err);
+                console.warn('Post-save reload failed', err);
+                updateSaveButton();
               }
               refreshMe();
               } else {
@@ -835,13 +871,7 @@ osmium osm2pbf updated.osm -o updated.pbf
           // Load local streets (residential/service/secondary/tertiary) into the base graph
           document.getElementById('btn-load-local').onclick = async function () {
             if (!window._idContext) {
-              alert(S('login_required'));
-              return;
-            }
-            if (!window._isLoggedIn) {
-              const overlay = document.getElementById('map-overlay');
-              if (overlay) overlay.style.display = 'flex';
-              alert(S('login_required'));
+              alert('Editor nog niet geladen.');
               return;
             }
             // Require sufficient zoom level for local street import
@@ -854,7 +884,7 @@ osmium osm2pbf updated.osm -o updated.pbf
             } catch (e) {}
             const bbox = computeViewportBBox();
             try {
-              const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=residential,service,secondary,tertiary`;
+              const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=motorway,trunk,primary,secondary,tertiary,residential,service,unclassified,road,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link`;
               const res = await fetch(url);
               const json = await res.json();
               if (res.ok && json && json.ok && json.data && json.data.type === 'FeatureCollection') {
@@ -871,6 +901,13 @@ osmium osm2pbf updated.osm -o updated.pbf
 
           // Boot iD only after login
           function bootID() {
+            // Force default background to OpenStreetMap (MAPNIK) and persist prefs
+            try {
+              window.localStorage.setItem('background-last-used', 'MAPNIK');
+              window.localStorage.setItem('background-last-used-toggle', 'MAPNIK');
+              // Optional: set custom template for consistency if user later toggles to custom
+              window.localStorage.setItem('background-custom-template', 'https://tile.openstreetmap.org/{zoom}/{x}/{y}.png');
+            } catch (e) {}
             var context = iD.coreContext()
               .assetPath('')
               .locale(currentLocaleCode())
@@ -879,6 +916,13 @@ osmium osm2pbf updated.osm -o updated.pbf
             // Ensure an immediate NL-centered view after init (helps Safari)
             try { context.map().centerZoom([5.3, 52.1], 7); } catch (e) {}
             window._idContext = context;
+            // Force non-wireframe rendering (avoid black strokes at high zoom)
+            try {
+              context.map().areaFill('full'); // persist preference internally
+              // Also ensure surface class reflects non-wireframe immediately
+              var surface = context.surface && context.surface();
+              if (surface) surface.classed('fill-wireframe', false);
+            } catch (e) {}
             // Keep connection object but disable remote OSM fetching to avoid unintended loads
             try {
               const conn = context.connection();
@@ -889,16 +933,20 @@ osmium osm2pbf updated.osm -o updated.pbf
             } catch (e) {
               // ignore
             }
-            // Set a safe background; prefer OSM tiles via Custom, else fall back to 'none'
+            // Set a safe background; prefer OpenStreetMap (MAPNIK), else fall back to 'custom' OSM tiles or 'none'
             try {
-              const custom = context.background().findSource('custom');
-              if (custom && custom.template) {
-                // Use OpenStreetMap standard tiles
-                custom.template('https://tile.openstreetmap.org/{zoom}/{x}/{y}.png');
-                context.background().baseLayerSource(custom);
+              const mapnik = context.background().findSource('MAPNIK');
+              if (mapnik) {
+                context.background().baseLayerSource(mapnik);
               } else {
-                const none = context.background().findSource('none');
-                if (none) context.background().baseLayerSource(none);
+                const custom = context.background().findSource('custom');
+                if (custom && custom.template) {
+                  custom.template('https://tile.openstreetmap.org/{zoom}/{x}/{y}.png');
+                  context.background().baseLayerSource(custom);
+                } else {
+                  const none = context.background().findSource('none');
+                  if (none) context.background().baseLayerSource(none);
+                }
               }
             } catch (e) {
               // ignore
@@ -923,21 +971,20 @@ osmium osm2pbf updated.osm -o updated.pbf
             context.history().on('change.topbar', updateSaveButton);
             updateSaveButton();
 
-            // Auto-load local streets when sufficiently zoomed in (throttled during move)
+            // Auto-load roads when sufficiently zoomed in (throttled during move)
             let _autoLocalFetching = false;
             let _autoLastLoadTime = 0;
             try {
               context.map().on('move.autoLocal', async function () {
                 if (!window._idContext) return;
-                if (!window._isLoggedIn) return;
                 const z = window._idContext.map().zoom();
                 const now = Date.now();
                 if (z >= 14 && !_autoLocalFetching && (now - _autoLastLoadTime > 2000)) {
                   _autoLocalFetching = true;
                   const bbox = computeViewportBBox();
                   try {
-                    const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=residential,service,secondary,tertiary`;
-                    const res = await fetch(url);
+                    const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=motorway,trunk,primary,secondary,tertiary,residential,service,unclassified,road,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link`;
+                    const res = await fetch(url, { credentials: 'include' });
                     const json = await res.json();
                     if (res.ok && json && json.ok && json.data && json.data.type === 'FeatureCollection') {
                       importGeoJSONToBase(window._idContext, json.data);
@@ -963,6 +1010,7 @@ osmium osm2pbf updated.osm -o updated.pbf
               const adminBtn = document.getElementById('btn-admin');
               const adminOverlay = document.getElementById('admin-overlay');
               const logoutBtn = document.getElementById('btn-logout');
+              const loginBtn = document.getElementById('btn-login');
               const loadLocalBtn = document.getElementById('btn-load-local');
               if (me && me.username) {
                 window._isLoggedIn = true;
@@ -973,7 +1021,11 @@ osmium osm2pbf updated.osm -o updated.pbf
                 if (overlay) overlay.style.display = 'none';
                 if (adminBtn) adminBtn.style.display = me.isAdmin ? 'inline-block' : 'none';
                 if (adminOverlay && !me.isAdmin) adminOverlay.style.display = 'none';
-                if (logoutBtn) logoutBtn.disabled = false;
+                if (loginBtn) loginBtn.style.display = 'none';
+                if (logoutBtn) {
+                  logoutBtn.style.display = 'inline-block';
+                  logoutBtn.disabled = false;
+                }
                 if (loadLocalBtn) loadLocalBtn.disabled = false;
                 if (!window._idContext) bootID();
                 await autoLoadMap();
@@ -986,7 +1038,11 @@ osmium osm2pbf updated.osm -o updated.pbf
                 if (overlay) overlay.style.display = 'none';
                 if (adminBtn) adminBtn.style.display = 'none';
                 if (adminOverlay) adminOverlay.style.display = 'none';
-                if (logoutBtn) logoutBtn.disabled = true;
+                if (loginBtn) loginBtn.style.display = 'inline-block';
+                if (logoutBtn) {
+                  logoutBtn.style.display = 'inline-block';
+                  logoutBtn.disabled = true;
+                }
                 if (loadLocalBtn) loadLocalBtn.disabled = true;
                 if (!window._idContext) bootID();
                 updateSaveButton();
@@ -999,6 +1055,7 @@ osmium osm2pbf updated.osm -o updated.pbf
               const adminBtn = document.getElementById('btn-admin');
               const adminOverlay = document.getElementById('admin-overlay');
               const logoutBtn = document.getElementById('btn-logout');
+              const loginBtn = document.getElementById('btn-login');
               const loadLocalBtn = document.getElementById('btn-load-local');
               statusText.textContent = S('not_logged_in');
               dot.classList.remove('online');
@@ -1007,7 +1064,11 @@ osmium osm2pbf updated.osm -o updated.pbf
               if (overlay) overlay.style.display = 'none';
               if (adminBtn) adminBtn.style.display = 'none';
               if (adminOverlay) adminOverlay.style.display = 'none';
-              if (logoutBtn) logoutBtn.disabled = true;
+              if (loginBtn) loginBtn.style.display = 'inline-block';
+              if (logoutBtn) {
+                logoutBtn.style.display = 'inline-block';
+                logoutBtn.disabled = true;
+              }
               if (loadLocalBtn) loadLocalBtn.disabled = true;
               if (!window._idContext) bootID();
               updateSaveButton();
