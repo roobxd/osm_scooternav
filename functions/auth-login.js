@@ -14,13 +14,13 @@ export async function handle(request, env) {
 
   const key = `users:${body.username}`;
   const userStr = await env.USERS.get(key);
-  if (!userStr) return respondJSON({ error: 'Unauthorized' }, 401);
+  if (!userStr) return respondJSON({ error: 'Invalid username or password' }, 401);
   let user;
-  try { user = JSON.parse(userStr); } catch { return respondJSON({ error: 'Unauthorized' }, 401); }
+  try { user = JSON.parse(userStr); } catch { return respondJSON({ error: 'Invalid username or password' }, 401); }
 
   const salt = env.PASSWORD_SALT || '';
   const passwordHash = await hashPassword(body.username, body.password, salt);
-  if (passwordHash !== user.passwordHash) return respondJSON({ error: 'Unauthorized' }, 401);
+  if (passwordHash !== user.passwordHash) return respondJSON({ error: 'Invalid username or password' }, 401);
 
   const token = await createSession(user.username, env.SESSION_SECRET);
   const cookie = makeCookie(COOKIE_NAME, token, { Path: '/', Secure: !!env.SECURE_COOKIES, SameSite: 'Lax', MaxAge: 86400 });

@@ -4,6 +4,9 @@
     <meta charset='utf-8'>
     <title>iD</title>
     <link rel='stylesheet' href='iD.css'>
+    <link rel='preconnect' href='https://fonts.googleapis.com'>
+    <link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+    <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap' rel='stylesheet'>
     <link rel='icon' type='image/png' href='data:image/png;base64,iVBORw0KGgo='>
     <meta name='viewport' content='width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no'/>
     <meta name='mobile-web-app-capable' content='yes'/>
@@ -21,6 +24,14 @@
     </style>
     <!-- ScooterNav theme overrides -->
     <style>
+      /* Global font improvements */
+      :root { --app-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif; }
+      html, body { font-family: var(--app-font); }
+      /* Form controls */
+      input, button, textarea, select { font-family: var(--app-font); }
+      /* Enforce font across iD UI and map labels */
+      #id-container, #id-container * { font-family: var(--app-font) !important; }
+      #id-container svg text { font-family: var(--app-font) !important; }
       .badge { background:#E63A46 !important; color:#fff; }
       .btn:focus { outline: 2px solid #E63A46; outline-offset: 2px; box-shadow: 0 0 0 3px rgba(230,58,70,.25); }
       /* Map line color overrides: alleen onze dataset (.layer-mapdata) rood per wegtype */
@@ -52,6 +63,7 @@
       /* ScooterNav red accents */
       .btn-primary { background:#E63A46; border-color:#E63A46; color:#fff; }
       .btn-primary:hover { background:#C5303B; }
+      .btn-primary:disabled { background:#f79aa3; border-color:#f79aa3; color:#fff; }
       .badge { display:inline-block; min-width:16px; padding:2px 6px; margin-left:8px; border-radius:999px; background:#E63A46; color:#fff; font-weight:600; font-size:12px; }
       .status { margin-left:auto; color:#374151; font-size:13px; display:flex; align-items:center; gap:8px; }
       .status-dot { width:8px; height:8px; border-radius:999px; background:#ef4444; }
@@ -75,6 +87,9 @@
       <button id='btn-save' class='btn'>Save <span class='badge'>0</span></button>
       <div id='status' class='status'><span id='status-dot' class='status-dot'></span><span id='status-text'>Not logged in</span></div>
     </div>
+
+    <!-- Toast container for lightweight notifications -->
+    <div id='toast-container' style='position:fixed; top:8px; right:8px; display:flex; flex-direction:column; gap:6px; z-index:1000; pointer-events:none;'></div>
     <div id='id-container' style='position:absolute; top:40px; bottom:0; left:0; right:0; display:none;'></div>
     <div id='map-overlay' style='position:absolute; top:40px; bottom:0; left:0; right:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#f8fafc,#f1f5f9); border-top:1px solid #e5e7eb;'>
       <div style='text-align:center; max-width:360px; width:100%; padding:16px;'>
@@ -90,6 +105,8 @@
         </div>
       </div>
     </div>
+
+    
 
     <div id='admin-overlay' style='position:absolute; top:40px; bottom:0; left:0; right:0; display:none; align-items:flex-start; justify-content:center; background:rgba(17,24,39,.75);'>
       <div style='margin-top:24px; background:#fff; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,.15); max-width:720px; width:100%; padding:16px;'>
@@ -114,6 +131,14 @@
             <div id='admin-changes-title' style='font-weight:600; margin-bottom:8px;'>Recent changes</div>
             <div id='admin-changes' style='max-height:320px; overflow:auto; border:1px solid #f1f5f9; border-radius:8px;'></div>
           </div>
+        </div>
+        <div style='margin-top:16px; border:1px solid #e5e7eb; border-radius:10px; padding:12px;'>
+          <div id='admin-lookup-title' style='font-weight:600; margin-bottom:8px;'>Zoek gebruiker</div>
+          <div style='display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;'>
+            <input id='admin-lookup-name' type='text' class='login-input' style='padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; min-width:200px;' placeholder='Zoek gebruiker…'>
+            <button id='admin-lookup-btn' class='btn'>Zoek</button>
+          </div>
+          <div id='admin-lookup-results' style='max-height:320px; overflow:auto; border:1px solid #f1f5f9; border-radius:8px;'></div>
         </div>
         <div style='margin-top:16px; border:1px solid #e5e7eb; border-radius:10px; padding:12px;'>
           <div id='admin-export-title' style='font-weight:600; margin-bottom:8px;'>Export dataset</div>
@@ -165,6 +190,43 @@ osmium osm2pbf updated.osm -o updated.pbf
         const ct = res.headers.get('content-type') || '';
         if (ct.includes('application/json')) return await res.json();
         return await res.text();
+      }
+
+      // Lightweight toast notifications
+      function showToast(message, type = 'info') {
+        try {
+          const cont = document.getElementById('toast-container');
+          if (!cont || !message) return;
+          const el = document.createElement('div');
+          el.textContent = message;
+          el.style.pointerEvents = 'auto';
+          el.style.padding = '8px 12px';
+          el.style.borderRadius = '8px';
+          el.style.boxShadow = '0 6px 16px rgba(0,0,0,.15)';
+          el.style.fontSize = '13px';
+          el.style.transition = 'opacity .3s ease';
+          el.style.color = '#111827';
+          el.style.opacity = '1';
+          // Color by type
+          if (type === 'success') {
+            el.style.background = '#d1fae5';
+            el.style.border = '1px solid #10b981';
+          } else if (type === 'error') {
+            el.style.background = '#fee2e2';
+            el.style.border = '1px solid #ef4444';
+          } else if (type === 'warning') {
+            el.style.background = '#fef3c7';
+            el.style.border = '1px solid #f59e0b';
+          } else {
+            el.style.background = '#e5e7eb';
+            el.style.border = '1px solid #9ca3af';
+          }
+          cont.appendChild(el);
+          setTimeout(() => { el.style.opacity = '0'; }, 2500);
+          setTimeout(() => { try { cont.removeChild(el); } catch(e) {} }, 3200);
+        } catch (e) {
+          // ignore toast failures
+        }
       }
 
       // --- Custom GeoJSON import/export helpers for iD ---
@@ -356,22 +418,74 @@ osmium osm2pbf updated.osm -o updated.pbf
 
       // Initial status will be updated after iD initializes
 
+      function escapeHTML(input) {
+        const s = String(input == null ? '' : input);
+        return s
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
       function setLoginError(msg) {
         const el = document.getElementById('login-error');
-        if (el) el.textContent = msg || '';
+        if (!el) return;
+        const text = msg || '';
+        el.textContent = text;
+        if (text) {
+          el.style.display = 'block';
+          el.style.background = '#fee2e2';
+          el.style.border = '1px solid #ef4444';
+          el.style.padding = '6px 8px';
+          el.style.borderRadius = '8px';
+        } else {
+          el.style.display = 'none';
+        }
       }
 
       async function performLogin(username, password) {
         setLoginError('');
+        const btn = document.getElementById('login-submit');
+        const originalText = btn && btn.textContent;
+        if (btn) { btn.disabled = true; btn.textContent = (window.S ? `${S('sign_in')}…` : 'Logging in…'); }
         try {
-          const r = await api('/login', 'POST', { username, password });
-          if (r && r.ok) {
+          const res = await fetch('/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+            credentials: 'include'
+          });
+          let data = null;
+          try { data = await res.json(); } catch(e) { /* non-JSON response */ }
+          if (res.ok && data && data.ok) {
+            // Succes: geen toast, UI wordt geüpdatet via refreshMe
             if (window._refreshMe) window._refreshMe();
           } else {
-            setLoginError(S ? S('login_failed') : 'Login failed');
+            const serverErr = data && data.error;
+            let msg;
+            if (serverErr) {
+              msg = serverErr;
+            } else if (res.status === 400 || res.status === 401) {
+              // Maak unauthorized duidelijker (401)
+              const base = window.S ? S('login_invalid') : 'Invalid username or password';
+              msg = `${base} (401)`;
+            } else if (res.status === 429) {
+              msg = window.S ? S('login_rate_limited') : 'Too many attempts, try again later';
+            } else if (res.status >= 500) {
+              msg = window.S ? `${S('login_server_error')} (${res.status})` : `Server error (${res.status})`;
+            } else if (!data) {
+              msg = window.S ? S('unexpected_response') : 'Unexpected server response';
+            } else {
+              msg = window.S ? S('login_failed') : 'Login failed';
+            }
+            setLoginError(msg);
           }
         } catch (e) {
-          setLoginError('Login failed');
+          const msg = window.S ? S('network_error') : 'Network error';
+          setLoginError(msg);
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = originalText; }
         }
       }
 
@@ -382,8 +496,14 @@ osmium osm2pbf updated.osm -o updated.pbf
         if (u) u.focus();
       };
       document.getElementById('btn-logout').onclick = async () => {
-        await api('/logout', 'POST');
-        if (window._refreshMe) window._refreshMe();
+        try {
+          await api('/logout', 'POST');
+          showToast(S('logout_success'), 'info');
+        } catch (e) {
+          showToast(S('network_error'), 'error');
+        } finally {
+          if (window._refreshMe) window._refreshMe();
+        }
       };
 
       // Admin UI handlers
@@ -417,8 +537,11 @@ osmium osm2pbf updated.osm -o updated.pbf
               const row = document.createElement('div');
               row.style.padding = '8px 10px';
               row.style.borderBottom = '1px solid #f3f4f6';
-              row.innerHTML = `<div style='font-size:13px; color:#111827;'>${e.summary || 'Change'}</div>
-                <div style='font-size:12px; color:#6b7280;'>${e.user || ''} — ${e.timestamp || ''}</div>`;
+              const sum = escapeHTML(e.summary || 'Change');
+              const user = escapeHTML(e.user || '');
+              const ts = escapeHTML(e.timestamp || '');
+              row.innerHTML = `<div style='font-size:13px; color:#111827;'>${sum}</div>
+                <div style='font-size:12px; color:#6b7280;'>${user} — ${ts}</div>`;
               changesEl.appendChild(row);
             }
           } catch (err) {
@@ -439,27 +562,50 @@ osmium osm2pbf updated.osm -o updated.pbf
           const password = (inputPass && inputPass.value) || '';
           const isAdmin = !!(inputIsAdmin && inputIsAdmin.checked);
           statusEl.textContent = '';
+          // Basic input validation
+          if (!username.trim() || !password.trim()) {
+            statusEl.style.color = '#ef4444';
+            const msg = 'Vul gebruikersnaam en wachtwoord in';
+            statusEl.textContent = msg;
+            showToast(msg, 'warning');
+            return;
+          }
+          // Disable while creating
+          const originalText = createBtn.textContent;
+          createBtn.disabled = true;
+          createBtn.textContent = (window.S ? `${S('admin_create')}…` : 'Creating…');
           try {
             const res = await fetch('/admin/create-user', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({ username, password, isAdmin })
             });
-            const j = await res.json();
+            let j;
+            try { j = await res.json(); } catch(e) { j = null; }
             if (res.ok && j && j.ok) {
               statusEl.style.color = '#10b981';
               statusEl.textContent = S('admin_create_success');
+              showToast(S('admin_create_success'), 'success');
               if (inputUser) inputUser.value = '';
               if (inputPass) inputPass.value = '';
               if (inputIsAdmin) inputIsAdmin.checked = false;
               loadAdminChanges();
             } else {
               statusEl.style.color = '#ef4444';
-              statusEl.textContent = S('admin_create_error');
+              const errMsg = (j && j.error) ? j.error : (res.status === 403 ? 'Geen rechten (403)' : S('admin_create_error'));
+              statusEl.textContent = errMsg;
+              showToast(errMsg, 'error');
             }
           } catch (err) {
             statusEl.style.color = '#ef4444';
-            statusEl.textContent = S('admin_create_error');
+            const errMsg = S('admin_create_error');
+            statusEl.textContent = errMsg;
+            showToast(errMsg, 'error');
+          } finally {
+            // Restore button state
+            createBtn.disabled = false;
+            createBtn.textContent = originalText;
           }
         });
 
@@ -533,7 +679,9 @@ osmium osm2pbf updated.osm -o updated.pbf
             'en': {
               login: 'Login',
               logout: 'Logout',
+              logout_success: 'Logged out',
               save: 'Save',
+              save_no_changes: 'No changes to save',
               load_local: 'Load Local Streets',
               admin: 'Admin',
               admin_close: 'Close',
@@ -555,12 +703,25 @@ osmium osm2pbf updated.osm -o updated.pbf
               username_label: 'Username',
               password_label: 'Password',
               sign_in: 'Login',
-              login_failed: 'Login failed'
+              login_failed: 'Login failed',
+              login_invalid: 'Invalid username or password',
+              login_rate_limited: 'Too many attempts, try again later',
+              login_server_error: 'Server error',
+              network_error: 'Network error',
+              unexpected_response: 'Unexpected server response',
+              lookup_search: 'Search',
+              lookup_placeholder: 'Search user…',
+              lookup_results: 'Search results',
+              lookup_total: 'Total changes',
+              lookup_no_results: 'No entries found',
+              lookup_failed: 'Search failed'
             },
             'nl': {
               login: 'Inloggen',
               logout: 'Uitloggen',
+              logout_success: 'Uitgelogd',
               save: 'Opslaan',
+              save_no_changes: 'Geen wijzigingen om op te slaan',
               load_local: 'Lokale straten laden',
               admin: 'Beheer',
               admin_close: 'Sluiten',
@@ -582,12 +743,25 @@ osmium osm2pbf updated.osm -o updated.pbf
               username_label: 'Gebruikersnaam',
               password_label: 'Wachtwoord',
               sign_in: 'Inloggen',
-              login_failed: 'Inloggen mislukt'
+              login_failed: 'Inloggen mislukt',
+              login_invalid: 'Onjuiste gebruikersnaam of wachtwoord',
+              login_rate_limited: 'Te veel pogingen, probeer later opnieuw',
+              login_server_error: 'Serverfout',
+              network_error: 'Netwerkfout',
+              unexpected_response: 'Onverwachte serverrespons',
+              lookup_search: 'Zoek',
+              lookup_placeholder: 'Zoek gebruiker…',
+              lookup_results: 'Zoekresultaten',
+              lookup_total: 'Totaal wijzigingen',
+              lookup_no_results: 'Geen entries gevonden',
+              lookup_failed: 'Zoeken mislukt'
             },
             'nl-NL': {
               login: 'Inloggen',
               logout: 'Uitloggen',
+              logout_success: 'Uitgelogd',
               save: 'Opslaan',
+              save_no_changes: 'Geen wijzigingen om op te slaan',
               load_local: 'Lokale straten laden',
               admin: 'Beheer',
               admin_close: 'Sluiten',
@@ -609,12 +783,25 @@ osmium osm2pbf updated.osm -o updated.pbf
               username_label: 'Gebruikersnaam',
               password_label: 'Wachtwoord',
               sign_in: 'Inloggen',
-              login_failed: 'Inloggen mislukt'
+              login_failed: 'Inloggen mislukt',
+              login_invalid: 'Onjuiste gebruikersnaam of wachtwoord',
+              login_rate_limited: 'Te veel pogingen, probeer later opnieuw',
+              login_server_error: 'Serverfout',
+              network_error: 'Netwerkfout',
+              unexpected_response: 'Onverwachte serverrespons',
+              lookup_search: 'Zoek',
+              lookup_placeholder: 'Zoek gebruiker…',
+              lookup_results: 'Zoekresultaten',
+              lookup_total: 'Totaal wijzigingen',
+              lookup_no_results: 'Geen entries gevonden',
+              lookup_failed: 'Zoeken mislukt'
             },
             'nl-BE': {
               login: 'Aanmelden',
               logout: 'Afmelden',
+              logout_success: 'Afgemeld',
               save: 'Opslaan',
+              save_no_changes: 'Geen wijzigingen om op te slaan',
               load_local: 'Lokale straten laden',
               admin: 'Beheer',
               admin_close: 'Sluiten',
@@ -636,7 +823,18 @@ osmium osm2pbf updated.osm -o updated.pbf
               username_label: 'Gebruikersnaam',
               password_label: 'Wachtwoord',
               sign_in: 'Aanmelden',
-              login_failed: 'Aanmelden mislukt'
+              login_failed: 'Aanmelden mislukt',
+              login_invalid: 'Onjuiste gebruikersnaam of wachtwoord',
+              login_rate_limited: 'Te veel pogingen, probeer later opnieuw',
+              login_server_error: 'Serverfout',
+              network_error: 'Netwerkfout',
+              unexpected_response: 'Onverwachte serverrespons',
+              lookup_search: 'Zoek',
+              lookup_placeholder: 'Zoek gebruiker…',
+              lookup_results: 'Zoekresultaten',
+              lookup_total: 'Totaal wijzigingen',
+              lookup_no_results: 'Geen entries gevonden',
+              lookup_failed: 'Zoeken mislukt'
             }
           };
           function currentLocaleCode() {
@@ -654,19 +852,26 @@ osmium osm2pbf updated.osm -o updated.pbf
             return str;
           }
           function applyTranslations() {
-            const $login = document.getElementById('btn-login');
-            const $logout = document.getElementById('btn-logout');
-            const $save = document.getElementById('btn-save');
-            const $loadLocal = document.getElementById('btn-load-local');
-            const $admin = document.getElementById('btn-admin');
-            if ($login) $login.textContent = S('login');
-            if ($logout) $logout.textContent = S('logout');
-            if ($admin) $admin.textContent = S('admin');
-            if ($save) {
-              const badge = $save.querySelector('.badge');
-              $save.innerHTML = S('save') + ' ' + (badge ? badge.outerHTML : "<span class='badge'>0</span>");
-            }
-            if ($loadLocal) $loadLocal.textContent = S('load_local');
+        const $login = document.getElementById('btn-login');
+        const $logout = document.getElementById('btn-logout');
+        const $save = document.getElementById('btn-save');
+        const $loadLocal = document.getElementById('btn-load-local');
+        const $admin = document.getElementById('btn-admin');
+            const $adminLookupBtn = document.getElementById('admin-lookup-btn');
+            const $adminLookupInput = document.getElementById('admin-lookup-name');
+        if ($login) $login.textContent = S('login');
+        if ($logout) $logout.textContent = S('logout');
+        if ($admin) $admin.textContent = S('admin');
+        if ($save) {
+          const badge = $save.querySelector('.badge');
+          $save.innerHTML = S('save') + ' ' + (badge ? badge.outerHTML : "<span class='badge'>0</span>");
+        }
+        if ($loadLocal) $loadLocal.textContent = S('load_local');
+            if ($adminLookupBtn) $adminLookupBtn.textContent = S('lookup_search');
+            if ($adminLookupInput) $adminLookupInput.placeholder = S('lookup_placeholder');
+            // Lookup UI strings
+            const adminLookupTitle = document.getElementById('admin-lookup-title');
+            if (adminLookupTitle) adminLookupTitle.textContent = S('lookup_results');
             // Also ensure status baseline text
             const statusText = document.getElementById('status-text');
             if (statusText) statusText.textContent = S('not_logged_in');
@@ -785,7 +990,7 @@ osmium osm2pbf updated.osm -o updated.pbf
           document.getElementById('btn-save').onclick = async function () {
             // If not logged in or no context yet, do nothing
             if (!window._idContext) {
-              alert(S('login_required'));
+              showToast(S('login_required'), 'error');
               return;
             }
             // Require login for saving; prompt if not logged in
@@ -794,22 +999,27 @@ osmium osm2pbf updated.osm -o updated.pbf
               if (!me || !me.username) {
                 const overlay = document.getElementById('map-overlay');
                 if (overlay) overlay.style.display = 'flex';
-                alert(S('login_required'));
+                showToast(S('login_required'), 'error');
                 return;
               }
             } catch (e) {
               const overlay = document.getElementById('map-overlay');
               if (overlay) overlay.style.display = 'flex';
-              alert(S('login_required'));
+              showToast(S('login_required'), 'error');
               return;
             }
             try {
-              const gj = exportGeoJSONFromContext(window._idContext);
               const diff = window._idContext.history().difference();
               const changeCount = diff.length();
+              if (changeCount === 0) {
+                showToast(S('save_no_changes') || 'Geen wijzigingen om op te slaan', 'warning');
+                updateSaveButton();
+                return;
+              }
+              const gj = exportGeoJSONFromContext(window._idContext);
               const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gj) });
             if (res.ok) {
-              alert(S('saved_changes', { count: changeCount }));
+              showToast(S('saved_changes', { count: changeCount }), 'success');
               // Na opslaan: herlaad de samengevoegde dataset zodat wijzigingen zichtbaar blijven
               try {
                 await loadMergedMapData();
@@ -819,13 +1029,81 @@ osmium osm2pbf updated.osm -o updated.pbf
               }
               refreshMe();
               } else {
-                alert(S('save_failed'));
+                showToast(S('save_failed'), 'error');
               }
             } catch (e) {
               console.error(e);
-              alert('Failed to export GeoJSON');
+              showToast('Failed to export GeoJSON', 'error');
             }
           };
+
+          // --- Admin gebruikerszoekfunctie ---
+          (function attachAdminLookup(){
+            const input = document.getElementById('admin-lookup-name');
+            const btn = document.getElementById('admin-lookup-btn');
+            const results = document.getElementById('admin-lookup-results');
+
+            async function runAdminLookup() {
+              const name = (input && input.value || '').trim();
+              if (!name) return;
+              results.innerHTML = `<div style='padding:10px; color:#6b7280;'>Loading…</div>`;
+              const originalText = btn && btn.textContent;
+              if (btn) { btn.disabled = true; btn.textContent = (window.S ? `${S('lookup_search')}…` : 'Search…'); }
+              let me;
+              try { me = await api('/me'); } catch(e) {}
+              if (!me || !me.isAdmin) {
+                results.innerHTML = `<div style='padding:10px; color:#ef4444;'>${S('login_required')}</div>`;
+                showToast(S('login_required'), 'error');
+                if (btn) { btn.disabled = false; btn.textContent = originalText; }
+                return;
+              }
+              try {
+                const res = await fetch(`/api/user?name=${encodeURIComponent(name)}&limit=50`, { credentials: 'include' });
+                let j;
+                try { j = await res.json(); } catch(e) { j = null; }
+                if (!res.ok) {
+                  const rawErr = (j && j.error) ? j.error : (res.status === 403 ? 'Geen rechten (403)' : S('lookup_failed'));
+                  const errMsg = escapeHTML(rawErr);
+                  results.innerHTML = `<div style='padding:10px 12px; color:#ef4444;'>${errMsg}</div>`;
+                  showToast(errMsg, 'error');
+                } else {
+                  const entries = Array.isArray(j.entries) ? j.entries : [];
+                  const total = (j.user && j.user.changeCount) || 0;
+                  const uname = escapeHTML((j.user && j.user.username) || name);
+                  let html = `
+                    <div style='padding:10px 12px; border-bottom:1px solid #f3f4f6;'>
+                      <div style='font-weight:600; color:#111827;'>${uname}</div>
+                      <div style='font-size:12px; color:#6b7280;'>${S('lookup_total')}: ${total}</div>
+                    </div>`;
+                  if (entries.length === 0) {
+                    html += `<div style='padding:10px 12px; color:#6b7280;'>${S('lookup_no_results')}</div>`;
+                  } else {
+                    html += `<div>`;
+                    for (const e of entries) {
+                      const sum = escapeHTML(e.summary || 'Wijziging');
+                      const ts = escapeHTML(e.timestamp || '');
+                      html += `<div style='padding:8px 12px; border-bottom:1px solid #f3f4f6;'>
+                        <div style='font-size:13px; color:#111827;'>${sum}</div>
+                        <div style='font-size:12px; color:#6b7280;'>${ts}</div>
+                      </div>`;
+                    }
+                    html += `</div>`;
+                  }
+                  results.innerHTML = html;
+                  showToast(S('lookup_results'), 'success');
+                }
+              } catch (err) {
+                const msg = S('lookup_failed');
+                results.innerHTML = `<div style='padding:10px 12px; color:#ef4444;'>${escapeHTML(msg)}</div>`;
+                showToast(msg, 'error');
+              } finally {
+                if (btn) { btn.disabled = false; btn.textContent = originalText; }
+              }
+            }
+
+            if (btn) btn.addEventListener('click', runAdminLookup);
+            if (input) input.addEventListener('keydown', function(e){ if (e.key === 'Enter') runAdminLookup(); });
+          })();
 
           // Update Save badge and enable state; guard for uninitialized context
           function updateSaveButton() {
@@ -839,8 +1117,8 @@ osmium osm2pbf updated.osm -o updated.pbf
             const diff = window._idContext.history().difference();
             const count = diff.length();
             if (badge) badge.textContent = count;
-            // Keep Save enabled so users can persist edits; badge reflects count
-            if ($save) $save.disabled = false;
+            // Disable Save when there are no changes
+            if ($save) $save.disabled = (count === 0);
           }
 
           // Determine current viewport bbox from iD map extent
@@ -871,14 +1149,14 @@ osmium osm2pbf updated.osm -o updated.pbf
           // Load local streets (residential/service/secondary/tertiary) into the base graph
           document.getElementById('btn-load-local').onclick = async function () {
             if (!window._idContext) {
-              alert('Editor nog niet geladen.');
+              showToast('Editor nog niet geladen.', 'error');
               return;
             }
             // Require sufficient zoom level for local street import
             try {
               const z = window._idContext.map().zoom();
               if (z < 14) {
-                alert('Zoom verder in om lokale straten te laden (>=14).');
+                showToast('Zoom verder in om lokale straten te laden (>=14).', 'warning');
                 return;
               }
             } catch (e) {}
@@ -891,11 +1169,11 @@ osmium osm2pbf updated.osm -o updated.pbf
                 importGeoJSONToBase(window._idContext, json.data);
                 try { zoomToGeoJSON(json.data); } catch (e) {}
               } else {
-                alert('Failed to load local streets');
+                showToast('Failed to load local streets', 'error');
               }
             } catch (e) {
               console.error('Load local streets failed', e);
-              alert('Failed to load local streets');
+              showToast('Failed to load local streets', 'error');
             }
           };
 
@@ -957,6 +1235,15 @@ osmium osm2pbf updated.osm -o updated.pbf
               if (isSaveShortcut) {
                 e.preventDefault();
                 e.stopPropagation();
+              }
+            }, true);
+            // QoL: Sluit overlays met Escape
+            window.addEventListener('keydown', function(e) {
+              if (e.key === 'Escape') {
+                const overlay = document.getElementById('map-overlay');
+                if (overlay) overlay.style.display = 'none';
+                const adminOverlay = document.getElementById('admin-overlay');
+                if (adminOverlay) adminOverlay.style.display = 'none';
               }
             }, true);
             // disable boundaries (unless we have an explicit disable_features list)
@@ -1040,7 +1327,8 @@ osmium osm2pbf updated.osm -o updated.pbf
                 if (adminOverlay) adminOverlay.style.display = 'none';
                 if (loginBtn) loginBtn.style.display = 'inline-block';
                 if (logoutBtn) {
-                  logoutBtn.style.display = 'inline-block';
+                  // Verberg de uitlogknop wanneer niet ingelogd
+                  logoutBtn.style.display = 'none';
                   logoutBtn.disabled = true;
                 }
                 if (loadLocalBtn) loadLocalBtn.disabled = true;
@@ -1066,7 +1354,8 @@ osmium osm2pbf updated.osm -o updated.pbf
               if (adminOverlay) adminOverlay.style.display = 'none';
               if (loginBtn) loginBtn.style.display = 'inline-block';
               if (logoutBtn) {
-                logoutBtn.style.display = 'inline-block';
+                // Verberg de uitlogknop bij fout of niet ingelogd
+                logoutBtn.style.display = 'none';
                 logoutBtn.disabled = true;
               }
               if (loadLocalBtn) loadLocalBtn.disabled = true;
