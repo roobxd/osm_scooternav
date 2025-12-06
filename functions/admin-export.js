@@ -1,21 +1,21 @@
 import { respondJSON, requireAuth } from './_utils.js';
 
 export async function handle(request, env) {
-  if (request.method !== 'GET') return respondJSON({ error: 'Method Not Allowed' }, 405);
+  if (request.method !== 'GET') return respondJSON({ error: 'Use GET to export dataset' }, 405);
 
   const auth = await requireAuth(request, env);
-  if (!auth) return respondJSON({ error: 'Unauthorized' }, 401);
-  if (!auth.user || !auth.user.isAdmin) return respondJSON({ error: 'Forbidden' }, 403);
+  if (!auth) return respondJSON({ error: 'Login required to export dataset', hint: 'Log in and try again.' }, 401);
+  if (!auth.user || !auth.user.isAdmin) return respondJSON({ error: 'Admin privileges required', hint: 'This endpoint is restricted to admins.' }, 403);
 
   const obj = await env.MAPDATA.get('nl.geojson');
-  if (!obj) return respondJSON({ error: 'Not Found' }, 404);
+  if (!obj) return respondJSON({ error: 'Baseline dataset not found', hint: 'Upload a baseline via /admin/upload or reset via /admin/reset-baseline.' }, 404);
 
   // Parse baseline
   let baseline;
   try {
     baseline = await new Response(obj.body).json();
   } catch (e) {
-    return respondJSON({ error: 'Baseline parse error' }, 500);
+    return respondJSON({ error: `Baseline parse error: ${e && e.message ? e.message : e}` }, 500);
   }
   const byId = new Map();
   if (baseline && Array.isArray(baseline.features)) {

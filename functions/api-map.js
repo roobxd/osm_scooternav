@@ -1,19 +1,19 @@
 import { respondJSON, requireAuth } from './_utils.js';
 
 export async function handle(request, env) {
-  if (request.method !== 'GET') return respondJSON({ error: 'Method Not Allowed' }, 405);
+  if (request.method !== 'GET') return respondJSON({ error: 'Use GET to fetch map data' }, 405);
   // Require authentication to access map data
   const auth = await requireAuth(request, env);
-  if (!auth) return respondJSON({ error: 'Unauthorized' }, 401);
+  if (!auth) return respondJSON({ error: 'Login required to fetch map data', hint: 'Log in and try again.' }, 401);
   const obj = await env.MAPDATA.get('nl.geojson');
-  if (!obj) return respondJSON({ error: 'Not Found' }, 404);
+  if (!obj) return respondJSON({ error: 'Baseline dataset not found', hint: 'Upload a baseline via /admin/upload or reset via /admin/reset-baseline.' }, 404);
 
   // Read baseline GeoJSON from R2
   let baseline;
   try {
     baseline = await new Response(obj.body).json();
   } catch (e) {
-    return respondJSON({ error: 'Baseline parse error' }, 500);
+    return respondJSON({ error: `Baseline parse error: ${e && e.message ? e.message : e}` }, 500);
   }
 
   const byId = new Map();

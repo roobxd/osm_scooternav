@@ -3,18 +3,18 @@ import { respondJSON, requireAuth } from './_utils.js';
 // GET /api/import-bbox?bbox=south,west,north,east&classes=residential,service,secondary,tertiary
 // Requires a logged-in user. Fetches roads in the bbox from Overpass and returns GeoJSON.
 export async function handle(request, env) {
-  if (request.method !== 'GET') return respondJSON({ error: 'Method Not Allowed' }, 405);
+  if (request.method !== 'GET') return respondJSON({ error: 'Use GET to import roads for a bbox' }, 405);
   const auth = await requireAuth(request, env);
-  if (!auth) return respondJSON({ error: 'Unauthorized' }, 401);
+  if (!auth) return respondJSON({ error: 'Login required to import roads', hint: 'Log in and try again.' }, 401);
 
   const url = new URL(request.url);
   const bboxStr = url.searchParams.get('bbox');
   const classesStr = url.searchParams.get('classes') || 'residential,service,secondary,tertiary';
-  if (!bboxStr) return respondJSON({ error: 'Missing bbox' }, 400);
+  if (!bboxStr) return respondJSON({ error: 'Missing "bbox" query parameter', hint: 'Provide south,west,north,east (e.g., 12.3,45.6,12.4,45.7).' }, 400);
 
   const parts = bboxStr.split(',').map(s => +s.trim());
   if (parts.length !== 4 || parts.some(n => Number.isNaN(n))) {
-    return respondJSON({ error: 'Invalid bbox' }, 400);
+    return respondJSON({ error: 'Invalid bbox format', hint: 'Expected four numeric values: south,west,north,east.' }, 400);
   }
   const [south, west, north, east] = parts;
   // Support full set of common highway values, including *_link variants
@@ -59,7 +59,7 @@ export async function handle(request, env) {
       lastErr = `Failed to fetch Overpass at ${ep}: ${e.message || e}`;
     }
   }
-  if (!overpassJSON) return respondJSON({ error: lastErr || 'Overpass failed' }, 502);
+  if (!overpassJSON) return respondJSON({ error: lastErr || 'Overpass failed', hint: 'Try again later; mirrors may be down.' }, 502);
 
   // Convert Overpass result to GeoJSON
   const nodes = new Map();

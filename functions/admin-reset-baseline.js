@@ -4,12 +4,12 @@ import { respondJSON, json, requireAuth } from './_utils.js';
 // POST /admin/reset-baseline { mode?: 'force' }
 // Requires X-Admin-Token header equal to env.ADMIN_TOKEN OR a logged-in admin user
 export async function handle(request, env) {
-  if (request.method !== 'POST') return respondJSON({ error: 'Method Not Allowed' }, 405);
+  if (request.method !== 'POST') return respondJSON({ error: 'Use POST to reset baseline dataset' }, 405);
 
   const token = request.headers.get('X-Admin-Token');
   if (!(env.ADMIN_TOKEN && token === env.ADMIN_TOKEN)) {
     const auth = await requireAuth(request, env);
-    if (!auth || !auth.user?.isAdmin) return respondJSON({ error: 'Forbidden' }, 403);
+    if (!auth || !auth.user?.isAdmin) return respondJSON({ error: 'Admin privileges required', hint: 'Provide X-Admin-Token or log in as an admin.' }, 403);
   }
 
   const body = await json(request) || {};
@@ -52,7 +52,7 @@ export async function handle(request, env) {
     overpassJSON = await Promise.any(endpoints.map((u) => queryOverpass(u)));
   } catch (aggregateErr) {
     const details = (aggregateErr && aggregateErr.errors) ? aggregateErr.errors.map(e => String(e.message || e)) : ['All Overpass mirrors failed'];
-    return respondJSON({ error: 'Overpass failed across mirrors', details }, 502);
+    return respondJSON({ error: 'Failed to fetch baseline from Overpass mirrors', details, hint: 'Try again later; mirrors may be down.' }, 502);
   }
 
   // Convert Overpass JSON to GeoJSON FeatureCollection (LineString for ways)

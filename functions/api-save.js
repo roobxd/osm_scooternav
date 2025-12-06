@@ -1,11 +1,16 @@
 import { respondJSON, json, requireAuth, randomId } from './_utils.js';
 
 export async function handle(request, env) {
-  if (request.method !== 'POST') return respondJSON({ error: 'Method Not Allowed' }, 405);
+  if (request.method !== 'POST') return respondJSON({ error: 'Use POST to save changes' }, 405);
   const auth = await requireAuth(request, env);
-  if (!auth) return respondJSON({ error: 'Unauthorized' }, 401);
-  const body = await json(request);
-  if (!body) return respondJSON({ error: 'Invalid JSON' }, 400);
+  if (!auth) return respondJSON({ error: 'Login required to save changes', hint: 'Log in and try again.' }, 401);
+  let body;
+  try {
+    body = await json(request);
+  } catch (e) {
+    return respondJSON({ error: 'Invalid JSON payload', hint: 'Send a GeoJSON FeatureCollection with a "features" array.' }, 400);
+  }
+  if (!body) return respondJSON({ error: 'Invalid JSON payload', hint: 'Request body missing or unreadable.' }, 400);
 
   // Delta-only save: record changes in KV and skip baseline rewrite.
   const changes = Array.isArray(body.features) ? body.features : [];

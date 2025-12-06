@@ -1,9 +1,9 @@
 import { respondJSON, requireAuth } from './_utils.js';
 
 export async function handle(request, env) {
-  if (request.method !== 'GET') return respondJSON({ error: 'Method Not Allowed' }, 405);
+  if (request.method !== 'GET') return respondJSON({ error: 'Use GET to fetch recent changes' }, 405);
   const auth = await requireAuth(request, env);
-  if (!auth) return respondJSON({ error: 'Unauthorized' }, 401);
+  if (!auth) return respondJSON({ error: 'Login required to view changes', hint: 'Log in and try again.' }, 401);
 
   const url = new URL(request.url);
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10), 100);

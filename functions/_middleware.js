@@ -8,6 +8,7 @@ import * as map from './api-map.js';
 import * as save from './api-save.js';
 import * as changes from './api-changes.js';
 import * as importBBox from './api-import-bbox.js';
+import * as userLookup from './api-user.js';
 import * as createUser from './auth-create.js';
 import * as updateUser from './auth-update.js';
 import * as resetBaseline from './admin-reset-baseline.js';
@@ -25,6 +26,7 @@ export async function onRequest(context) {
     { path: '/me', mod: me },
     { path: '/api/map', mod: map },
     { path: '/api/import-bbox', mod: importBBox },
+    { path: '/api/user', mod: userLookup },
     { path: '/api/save', mod: save },
     { path: '/api/changes', mod: changes },
     { path: '/admin/create-user', mod: createUser },

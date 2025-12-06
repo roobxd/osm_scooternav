@@ -185,8 +185,24 @@ osmium osm2pbf updated.osm -o updated.pbf
       // Configure iD API base as requested
       window.ID = { apiUrl: '/api' };
 
+      // When running the static editor on 8080, send API calls to the backend on 8788
+      function apiOrigin() {
+        try { return (window.location.port === '8080') ? 'http://localhost:8788' : ''; } catch (e) { return ''; }
+      }
+      function apiUrl(path) {
+        try {
+          if (!path) return path;
+          if (path.startsWith('http://') || path.startsWith('https://')) return path;
+          if (path.startsWith('/')) return apiOrigin() + path;
+          return path;
+        } catch (e) {
+          return path;
+        }
+      }
+
       async function api(path, method = 'GET', body) {
-        const res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined, credentials: 'include' });
+        const url = apiUrl(path);
+        const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined, credentials: 'include' });
         const ct = res.headers.get('content-type') || '';
         if (ct.includes('application/json')) return await res.json();
         return await res.text();
@@ -226,6 +242,19 @@ osmium osm2pbf updated.osm -o updated.pbf
           setTimeout(() => { try { cont.removeChild(el); } catch(e) {} }, 3200);
         } catch (e) {
           // ignore toast failures
+        }
+      }
+
+      // Build a human-friendly error message from a Response + JSON body
+      function buildErrorMessage(res, data, fallbackKey) {
+        try {
+          const status = (res && res.status) || 0;
+          const base = (data && (data.error || data.message)) || (window.S ? S(fallbackKey) : 'Request failed');
+          const hint = (data && data.hint) ? ` — ${data.hint}` : '';
+          const suffix = status ? ` (${status})` : '';
+          return `${base}${hint}${suffix}`;
+        } catch (e) {
+          return window.S ? S(fallbackKey) : 'Request failed';
         }
       }
 
@@ -450,7 +479,7 @@ osmium osm2pbf updated.osm -o updated.pbf
         const originalText = btn && btn.textContent;
         if (btn) { btn.disabled = true; btn.textContent = (window.S ? `${S('sign_in')}…` : 'Logging in…'); }
         try {
-          const res = await fetch('/login', {
+          const res = await fetch(apiUrl('/login'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
@@ -462,22 +491,19 @@ osmium osm2pbf updated.osm -o updated.pbf
             // Succes: geen toast, UI wordt geüpdatet via refreshMe
             if (window._refreshMe) window._refreshMe();
           } else {
-            const serverErr = data && data.error;
             let msg;
-            if (serverErr) {
-              msg = serverErr;
-            } else if (res.status === 400 || res.status === 401) {
-              // Maak unauthorized duidelijker (401)
-              const base = window.S ? S('login_invalid') : 'Invalid username or password';
-              msg = `${base} (401)`;
+            if (data && (data.error || data.hint)) {
+              msg = buildErrorMessage(res, data, 'login_failed');
             } else if (res.status === 429) {
-              msg = window.S ? S('login_rate_limited') : 'Too many attempts, try again later';
+              msg = (window.S ? S('login_rate_limited') : 'Too many attempts, try again later') + ' (429)';
             } else if (res.status >= 500) {
-              msg = window.S ? `${S('login_server_error')} (${res.status})` : `Server error (${res.status})`;
+              msg = (window.S ? S('login_server_error') : 'Server error') + ` (${res.status})`;
+            } else if (res.status === 403) {
+              msg = (window.S ? S('forbidden') : 'Forbidden') + ' (403)';
             } else if (!data) {
               msg = window.S ? S('unexpected_response') : 'Unexpected server response';
             } else {
-              msg = window.S ? S('login_failed') : 'Login failed';
+              msg = (window.S ? S('login_failed') : 'Login failed') + (res.status ? ` (${res.status})` : '');
             }
             setLoginError(msg);
           }
@@ -495,16 +521,16 @@ osmium osm2pbf updated.osm -o updated.pbf
         const u = document.getElementById('login-username');
         if (u) u.focus();
       };
-      document.getElementById('btn-logout').onclick = async () => {
-        try {
-          await api('/logout', 'POST');
-          showToast(S('logout_success'), 'info');
-        } catch (e) {
-          showToast(S('network_error'), 'error');
-        } finally {
-          if (window._refreshMe) window._refreshMe();
-        }
-      };
+          document.getElementById('btn-logout').onclick = async () => {
+            try {
+              await api('/logout', 'POST');
+              showToast(S('logout_success'), 'info');
+            } catch (e) {
+              showToast(S('network_error'), 'error');
+            } finally {
+              if (window._refreshMe) window._refreshMe();
+            }
+          };
 
       // Admin UI handlers
       (function attachAdminHandlers() {
@@ -526,7 +552,7 @@ osmium osm2pbf updated.osm -o updated.pbf
           if (!changesEl) return;
           changesEl.innerHTML = '';
           try {
-            const res = await fetch('/api/changes');
+            const res = await fetch(apiUrl('/api/changes'));
             const json = await res.json();
             const entries = (json && json.entries) || [];
             if (entries.length === 0) {
@@ -575,7 +601,7 @@ osmium osm2pbf updated.osm -o updated.pbf
           createBtn.disabled = true;
           createBtn.textContent = (window.S ? `${S('admin_create')}…` : 'Creating…');
           try {
-            const res = await fetch('/admin/create-user', {
+            const res = await fetch(apiUrl('/admin/create-user'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
@@ -613,7 +639,7 @@ osmium osm2pbf updated.osm -o updated.pbf
         if (exportGeoJSONBtn) exportGeoJSONBtn.addEventListener('click', async () => {
           try {
             // open in new tab to trigger attachment download
-            window.open('/admin/export', '_blank');
+            window.open(apiUrl('/admin/export'), '_blank');
           } catch (err) {
             console.warn('Admin export failed', err);
           }
@@ -695,10 +721,12 @@ osmium osm2pbf updated.osm -o updated.pbf
               admin_export: 'Export dataset',
               admin_export_download: 'Download GeoJSON',
               admin_export_copy_cli: 'Copy PBF export CLI',
+              export_failed: 'Failed to export GeoJSON',
               not_logged_in: 'Not logged in',
               logged_in_as: 'Logged in as {username}',
               saved_changes: 'Saved {count} changes',
               save_failed: 'Save failed',
+              editor_not_ready: 'Editor not loaded',
               login_required: 'Login required to view the map',
               username_label: 'Username',
               password_label: 'Password',
@@ -709,12 +737,17 @@ osmium osm2pbf updated.osm -o updated.pbf
               login_server_error: 'Server error',
               network_error: 'Network error',
               unexpected_response: 'Unexpected server response',
+              forbidden: 'Forbidden',
+              zoom_in_to_load_local: 'Zoom in to load local streets (>=14).',
+              load_local_failed: 'Failed to load local streets',
+              loading: 'Loading…',
               lookup_search: 'Search',
               lookup_placeholder: 'Search user…',
               lookup_results: 'Search results',
               lookup_total: 'Total changes',
               lookup_no_results: 'No entries found',
-              lookup_failed: 'Search failed'
+              lookup_failed: 'Search failed',
+              lookup_user_not_found: 'User not found'
             },
             'nl': {
               login: 'Inloggen',
@@ -735,10 +768,12 @@ osmium osm2pbf updated.osm -o updated.pbf
               admin_export: 'Dataset exporteren',
               admin_export_download: 'Download GeoJSON',
               admin_export_copy_cli: 'Kopieer PBF export CLI',
+              export_failed: 'Exporteren van GeoJSON mislukt',
               not_logged_in: 'Niet ingelogd',
               logged_in_as: 'Ingelogd als {username}',
               saved_changes: '{count} wijzigingen opgeslagen',
               save_failed: 'Opslaan mislukt',
+              editor_not_ready: 'Editor nog niet geladen.',
               login_required: 'Inloggen vereist om de kaart te zien',
               username_label: 'Gebruikersnaam',
               password_label: 'Wachtwoord',
@@ -749,12 +784,17 @@ osmium osm2pbf updated.osm -o updated.pbf
               login_server_error: 'Serverfout',
               network_error: 'Netwerkfout',
               unexpected_response: 'Onverwachte serverrespons',
+              forbidden: 'Geen rechten',
+              zoom_in_to_load_local: 'Zoom verder in om lokale straten te laden (>=14).',
+              load_local_failed: 'Laden van lokale straten mislukt',
+              loading: 'Laden…',
               lookup_search: 'Zoek',
               lookup_placeholder: 'Zoek gebruiker…',
               lookup_results: 'Zoekresultaten',
               lookup_total: 'Totaal wijzigingen',
               lookup_no_results: 'Geen entries gevonden',
-              lookup_failed: 'Zoeken mislukt'
+              lookup_failed: 'Zoeken mislukt',
+              lookup_user_not_found: 'Gebruiker niet gevonden'
             },
             'nl-NL': {
               login: 'Inloggen',
@@ -775,10 +815,12 @@ osmium osm2pbf updated.osm -o updated.pbf
               admin_export: 'Dataset exporteren',
               admin_export_download: 'Download GeoJSON',
               admin_export_copy_cli: 'Kopieer PBF export CLI',
+              export_failed: 'Exporteren van GeoJSON mislukt',
               not_logged_in: 'Niet ingelogd',
               logged_in_as: 'Ingelogd als {username}',
               saved_changes: '{count} wijzigingen opgeslagen',
               save_failed: 'Opslaan mislukt',
+              editor_not_ready: 'Editor nog niet geladen.',
               login_required: 'Inloggen vereist om de kaart te zien',
               username_label: 'Gebruikersnaam',
               password_label: 'Wachtwoord',
@@ -789,12 +831,17 @@ osmium osm2pbf updated.osm -o updated.pbf
               login_server_error: 'Serverfout',
               network_error: 'Netwerkfout',
               unexpected_response: 'Onverwachte serverrespons',
+              forbidden: 'Geen rechten',
+              zoom_in_to_load_local: 'Zoom verder in om lokale straten te laden (>=14).',
+              load_local_failed: 'Laden van lokale straten mislukt',
+              loading: 'Laden…',
               lookup_search: 'Zoek',
               lookup_placeholder: 'Zoek gebruiker…',
               lookup_results: 'Zoekresultaten',
               lookup_total: 'Totaal wijzigingen',
               lookup_no_results: 'Geen entries gevonden',
-              lookup_failed: 'Zoeken mislukt'
+              lookup_failed: 'Zoeken mislukt',
+              lookup_user_not_found: 'Gebruiker niet gevonden'
             },
             'nl-BE': {
               login: 'Aanmelden',
@@ -815,10 +862,12 @@ osmium osm2pbf updated.osm -o updated.pbf
               admin_export: 'Dataset exporteren',
               admin_export_download: 'Download GeoJSON',
               admin_export_copy_cli: 'Kopieer PBF export CLI',
+              export_failed: 'Exporteren van GeoJSON mislukt',
               not_logged_in: 'Niet aangemeld',
               logged_in_as: 'Aangemeld als {username}',
               saved_changes: '{count} wijzigingen opgeslagen',
               save_failed: 'Opslaan mislukt',
+              editor_not_ready: 'Editor nog niet geladen.',
               login_required: 'Aanmelden vereist om de kaart te zien',
               username_label: 'Gebruikersnaam',
               password_label: 'Wachtwoord',
@@ -829,12 +878,17 @@ osmium osm2pbf updated.osm -o updated.pbf
               login_server_error: 'Serverfout',
               network_error: 'Netwerkfout',
               unexpected_response: 'Onverwachte serverrespons',
+              forbidden: 'Geen rechten',
+              zoom_in_to_load_local: 'Zoom verder in om lokale straten te laden (>=14).',
+              load_local_failed: 'Laden van lokale straten mislukt',
+              loading: 'Laden…',
               lookup_search: 'Zoek',
               lookup_placeholder: 'Zoek gebruiker…',
               lookup_results: 'Zoekresultaten',
               lookup_total: 'Totaal wijzigingen',
               lookup_no_results: 'Geen entries gevonden',
-              lookup_failed: 'Zoeken mislukt'
+              lookup_failed: 'Zoeken mislukt',
+              lookup_user_not_found: 'Gebruiker niet gevonden'
             }
           };
           function currentLocaleCode() {
@@ -1017,7 +1071,9 @@ osmium osm2pbf updated.osm -o updated.pbf
                 return;
               }
               const gj = exportGeoJSONFromContext(window._idContext);
-              const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gj) });
+              const res = await fetch(apiUrl('/api/save'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gj), credentials: 'include' });
+              let j = null;
+              try { j = await res.json(); } catch(e) {}
             if (res.ok) {
               showToast(S('saved_changes', { count: changeCount }), 'success');
               // Na opslaan: herlaad de samengevoegde dataset zodat wijzigingen zichtbaar blijven
@@ -1029,11 +1085,12 @@ osmium osm2pbf updated.osm -o updated.pbf
               }
               refreshMe();
               } else {
-                showToast(S('save_failed'), 'error');
+                const msg = buildErrorMessage(res, j, 'save_failed');
+                showToast(msg, 'error');
               }
             } catch (e) {
               console.error(e);
-              showToast('Failed to export GeoJSON', 'error');
+              showToast(S('save_failed'), 'error');
             }
           };
 
@@ -1046,7 +1103,7 @@ osmium osm2pbf updated.osm -o updated.pbf
             async function runAdminLookup() {
               const name = (input && input.value || '').trim();
               if (!name) return;
-              results.innerHTML = `<div style='padding:10px; color:#6b7280;'>Loading…</div>`;
+              results.innerHTML = `<div style='padding:10px; color:#6b7280;'>${S('loading')}</div>`;
               const originalText = btn && btn.textContent;
               if (btn) { btn.disabled = true; btn.textContent = (window.S ? `${S('lookup_search')}…` : 'Search…'); }
               let me;
@@ -1058,48 +1115,64 @@ osmium osm2pbf updated.osm -o updated.pbf
                 return;
               }
               try {
-                const res = await fetch(`/api/user?name=${encodeURIComponent(name)}&limit=50`, { credentials: 'include' });
-                let j;
-                try { j = await res.json(); } catch(e) { j = null; }
+                const res = await fetch(apiUrl(`/api/user?name=${encodeURIComponent(name)}&limit=50`), { credentials: 'include' });
+                const ct = res.headers.get('content-type') || '';
+                let j = null;
+                let textMsg = '';
+                if (ct.includes('application/json')) {
+                  try { j = await res.json(); } catch(e) { j = null; }
+                } else {
+                  try { textMsg = await res.text(); } catch(e) { textMsg = ''; }
+                }
                 if (!res.ok) {
-                  const rawErr = (j && j.error) ? j.error : (res.status === 403 ? 'Geen rechten (403)' : S('lookup_failed'));
-                  const errMsg = escapeHTML(rawErr);
-                  results.innerHTML = `<div style='padding:10px 12px; color:#ef4444;'>${errMsg}</div>`;
-                  showToast(errMsg, 'error');
+                  const payload = j || (textMsg ? { error: textMsg } : null);
+                  const userMsg = escapeHTML((payload && payload.error) ? payload.error : S('lookup_failed'));
+                  const hintMsg = escapeHTML((payload && payload.hint) ? payload.hint : '');
+                  let msgHtml = `<div style='font-weight:600;'>${userMsg}</div>`;
+                  if (hintMsg) msgHtml += `<div style='font-size:12px; color:#6b7280;'>${hintMsg}</div>`;
+                  results.innerHTML = `<div style='padding:10px 12px; color:#ef4444;'>${msgHtml}</div>`;
+                  // Log statuscode in console voor debugging, maar toon alleen duidelijke tekst in UI
+                  try { console.warn('Lookup failed', res.status, payload); } catch(e) {}
+                  showToast(userMsg, 'error');
                 } else {
                   const entries = Array.isArray(j.entries) ? j.entries : [];
                   const total = (j.user && j.user.changeCount) || 0;
                   const uname = escapeHTML((j.user && j.user.username) || name);
                   let html = `
-                    <div style='padding:10px 12px; border-bottom:1px solid #f3f4f6;'>
-                      <div style='font-weight:600; color:#111827;'>${uname}</div>
-                      <div style='font-size:12px; color:#6b7280;'>${S('lookup_total')}: ${total}</div>
-                    </div>`;
-                  if (entries.length === 0) {
-                    html += `<div style='padding:10px 12px; color:#6b7280;'>${S('lookup_no_results')}</div>`;
-                  } else {
-                    html += `<div>`;
-                    for (const e of entries) {
-                      const sum = escapeHTML(e.summary || 'Wijziging');
-                      const ts = escapeHTML(e.timestamp || '');
-                      html += `<div style='padding:8px 12px; border-bottom:1px solid #f3f4f6;'>
-                        <div style='font-size:13px; color:#111827;'>${sum}</div>
-                        <div style='font-size:12px; color:#6b7280;'>${ts}</div>
-                      </div>`;
-                    }
-                    html += `</div>`;
-                  }
-                  results.innerHTML = html;
-                  showToast(S('lookup_results'), 'success');
+                <div style='padding:10px 12px; border-bottom:1px solid #f3f4f6;'>
+                  <div style='font-weight:600; color:#111827;'>${uname}</div>
+                  <div style='font-size:12px; color:#6b7280;'>${S('lookup_total')}: ${total}</div>
+                </div>`;
+              if (entries.length === 0) {
+                html += `<div style='padding:10px 12px; color:#6b7280;'>${S('lookup_no_results')}</div>`;
+              } else {
+                html += `<div>`;
+                for (const e of entries) {
+                  const sum = escapeHTML(e.summary || 'Wijziging');
+                  const ts = escapeHTML(e.timestamp || '');
+                  html += `<div style='padding:8px 12px; border-bottom:1px solid #f3f4f6;'>
+                    <div style='font-size:13px; color:#111827;'>${sum}</div>
+                    <div style='font-size:12px; color:#6b7280;'>${ts}</div>
+                  </div>`;
                 }
-              } catch (err) {
-                const msg = S('lookup_failed');
-                results.innerHTML = `<div style='padding:10px 12px; color:#ef4444;'>${escapeHTML(msg)}</div>`;
-                showToast(msg, 'error');
-              } finally {
-                if (btn) { btn.disabled = false; btn.textContent = originalText; }
+                html += `</div>`;
               }
+              results.innerHTML = html;
             }
+          } catch (err) {
+            let msg = S('lookup_failed');
+            // Toon duidelijke tekst, zonder statuscode in de UI
+            if (err && err.status) {
+              if (err.status === 401) msg = S('login_required');
+              else if (err.status === 403) msg = S('forbidden');
+              else if (err.status === 404) msg = S('lookup_user_not_found');
+            }
+            results.innerHTML = `<div style='padding:10px 12px; color:#ef4444;'>${escapeHTML(msg)}</div>`;
+            try { console.warn('Lookup error', err && err.status, err); } catch(e) {}
+          } finally {
+            if (btn) { btn.disabled = false; btn.textContent = originalText; }
+          }
+        }
 
             if (btn) btn.addEventListener('click', runAdminLookup);
             if (input) input.addEventListener('keydown', function(e){ if (e.key === 'Enter') runAdminLookup(); });
@@ -1149,31 +1222,33 @@ osmium osm2pbf updated.osm -o updated.pbf
           // Load local streets (residential/service/secondary/tertiary) into the base graph
           document.getElementById('btn-load-local').onclick = async function () {
             if (!window._idContext) {
-              showToast('Editor nog niet geladen.', 'error');
+              showToast(S('editor_not_ready'), 'error');
               return;
             }
             // Require sufficient zoom level for local street import
             try {
               const z = window._idContext.map().zoom();
               if (z < 14) {
-                showToast('Zoom verder in om lokale straten te laden (>=14).', 'warning');
+                showToast(S('zoom_in_to_load_local'), 'warning');
                 return;
               }
             } catch (e) {}
             const bbox = computeViewportBBox();
             try {
               const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=motorway,trunk,primary,secondary,tertiary,residential,service,unclassified,road,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link`;
-              const res = await fetch(url);
-              const json = await res.json();
+              const res = await fetch(apiUrl(url), { credentials: 'include' });
+              let json = null;
+              try { json = await res.json(); } catch(e) { json = null; }
               if (res.ok && json && json.ok && json.data && json.data.type === 'FeatureCollection') {
                 importGeoJSONToBase(window._idContext, json.data);
                 try { zoomToGeoJSON(json.data); } catch (e) {}
               } else {
-                showToast('Failed to load local streets', 'error');
+                const msg = buildErrorMessage(res, json, 'load_local_failed');
+                showToast(msg, 'error');
               }
             } catch (e) {
               console.error('Load local streets failed', e);
-              showToast('Failed to load local streets', 'error');
+              showToast(S('load_local_failed'), 'error');
             }
           };
 
@@ -1271,7 +1346,7 @@ osmium osm2pbf updated.osm -o updated.pbf
                   const bbox = computeViewportBBox();
                   try {
                     const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=motorway,trunk,primary,secondary,tertiary,residential,service,unclassified,road,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link`;
-                    const res = await fetch(url, { credentials: 'include' });
+                    const res = await fetch(apiUrl(url), { credentials: 'include' });
                     const json = await res.json();
                     if (res.ok && json && json.ok && json.data && json.data.type === 'FeatureCollection') {
                       importGeoJSONToBase(window._idContext, json.data);
@@ -1365,7 +1440,7 @@ osmium osm2pbf updated.osm -o updated.pbf
           }
           window._refreshMe = refreshMe;
 
-          refreshMe();
+      refreshMe();
         }
       }
     </script>
