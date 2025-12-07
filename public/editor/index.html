@@ -1235,7 +1235,7 @@ osmium osm2pbf updated.osm -o updated.pbf
             } catch (e) {}
             const bbox = computeViewportBBox();
             try {
-              const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=motorway,trunk,primary,secondary,tertiary,residential,service,unclassified,road,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link`;
+              const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=motorway,trunk,primary,secondary,tertiary,residential,service,unclassified,road,cycleway,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link`;
               const res = await fetch(apiUrl(url), { credentials: 'include' });
               let json = null;
               try { json = await res.json(); } catch(e) { json = null; }
@@ -1326,7 +1326,9 @@ osmium osm2pbf updated.osm -o updated.pbf
             // Default to showing only roads; hide points and non-road features.
             // Even if a disable_features param exists, force-hide point layers.
             var feat = context.features();
-            var toDisable = ['boundaries', 'address_points', 'points', 'buildings', 'building_parts', 'indoor', 'landuse', 'water', 'rail', 'pistes', 'aerialways', 'power', 'past_future', 'others', 'paths'];
+            // Show cycleways/paths by keeping 'paths' enabled. We still hide
+            // non-road/non-cycle layers to reduce visual clutter.
+            var toDisable = ['boundaries', 'address_points', 'points', 'buildings', 'building_parts', 'indoor', 'landuse', 'water', 'rail', 'pistes', 'aerialways', 'power', 'past_future', 'others'];
             toDisable.forEach(function(k){
               try { feat.disable(k); } catch(e) { /* ignore unknown keys */ }
             });
@@ -1345,7 +1347,7 @@ osmium osm2pbf updated.osm -o updated.pbf
                   _autoLocalFetching = true;
                   const bbox = computeViewportBBox();
                   try {
-                    const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=motorway,trunk,primary,secondary,tertiary,residential,service,unclassified,road,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link`;
+                    const url = `/api/import-bbox?bbox=${bbox.join(',')}&classes=motorway,trunk,primary,secondary,tertiary,residential,service,unclassified,road,cycleway,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link`;
                     const res = await fetch(apiUrl(url), { credentials: 'include' });
                     const json = await res.json();
                     if (res.ok && json && json.ok && json.data && json.data.type === 'FeatureCollection') {

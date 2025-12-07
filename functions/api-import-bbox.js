@@ -9,7 +9,7 @@ export async function handle(request, env) {
 
   const url = new URL(request.url);
   const bboxStr = url.searchParams.get('bbox');
-  const classesStr = url.searchParams.get('classes') || 'residential,service,secondary,tertiary';
+  const classesStr = url.searchParams.get('classes') || 'motorway,trunk,primary,secondary,tertiary,residential,service,unclassified,road,cycleway';
   if (!bboxStr) return respondJSON({ error: 'Missing "bbox" query parameter', hint: 'Provide south,west,north,east (e.g., 12.3,45.6,12.4,45.7).' }, 400);
 
   const parts = bboxStr.split(',').map(s => +s.trim());
@@ -24,7 +24,8 @@ export async function handle(request, env) {
     'primary','primary_link',
     'secondary','secondary_link',
     'tertiary','tertiary_link',
-    'residential','service','unclassified','road'
+    'residential','service','unclassified','road',
+    'cycleway'
   ]);
   const requested = classesStr
     .split(',')
@@ -33,7 +34,7 @@ export async function handle(request, env) {
     .filter(c => allowed.has(c));
   const classRegex = requested.length
     ? `^(${requested.join('|')})$`
-    : '^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|residential|service|unclassified|road)$';
+    : '^(motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|residential|service|unclassified|road|cycleway)$';
 
   // Build Overpass query for bbox and requested classes
   const overpassQuery = `\n[out:json][timeout:120][bbox:${south},${west},${north},${east}];\n(\n  way["highway"~"${classRegex}"];\n);\n(._;>;);\nout body;\n`;
