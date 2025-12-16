@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Red scooter favicon (inspired by Discord-style red), transparent bg -->
+  <circle cx="18" cy="46" r="8" fill="#1f2937"/>
+  <circle cx="50" cy="46" r="8" fill="#1f2937"/>
+
+  <!-- Deck -->
+  <rect x="26" y="38" width="14" height="6" rx="2" fill="#E63A46"/>
+  <!-- Seat -->
+  <rect x="24" y="26" width="10" height="4" rx="2" fill="#E63A46"/>
+
+  <!-- Frame lines -->
+  <path d="M18 46 H42" stroke="#8B1E26" stroke-width="3" stroke-linecap="round"/>
+  <path d="M42 46 C42 36 48 34 48 34 H52" stroke="#8B1E26" stroke-width="3" stroke-linecap="round"/>
+  <path d="M48 34 L50 28" stroke="#8B1E26" stroke-width="3" stroke-linecap="round"/>
+  <path d="M50 28 H56" stroke="#8B1E26" stroke-width="3" stroke-linecap="round"/>
+  <path d="M34 28 H42" stroke="#8B1E26" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Headlight -->
+  <circle cx="58" cy="28" r="2.5" fill="#facc15" stroke="#8B1E26" stroke-width="1.5"/>
+  <!-- Accent highlight on body -->
+  <path d="M26 38 H40" stroke="#E86A74" stroke-width="2" stroke-linecap="round"/>
+</svg>
